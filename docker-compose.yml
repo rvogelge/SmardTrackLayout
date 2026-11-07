@@ -1,0 +1,13 @@
+services:
+  smardtracklayout:
+    build: .
+    image: smardtracklayout:latest
+    container_name: smardtracklayout
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - stl-data:/data
+
+volumes:
+  stl-data:

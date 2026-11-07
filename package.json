@@ -1,0 +1,13 @@
+{
+  "name": "smardtracklayout",
+  "version": "0.1.0",
+  "description": "Web-based model railway track layout editor using the XTrackCAD parameter libraries",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

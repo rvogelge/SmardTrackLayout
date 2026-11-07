@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmardTrackLayout</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="toolbar">
+  <div class="brand"><img src="favicon.svg" alt=""><span>SmardTrackLayout</span></div>
+  <div class="tgroup">
+    <input id="layoutName" class="name" value="Untitled" title="Layout name" spellcheck="false">
+    <button id="btnNew" title="New layout">New</button>
+    <button id="btnOpen" title="Open a layout saved on the server">Open</button>
+    <button id="btnSave" class="primary" title="Save layout on the server (Ctrl+S)">Save</button>
+    <button id="btnExport" title="Download layout as JSON">Export</button>
+    <button id="btnImport" title="Load layout from a JSON file">Import</button>
+    <input id="fileImport" type="file" accept=".json,application/json" hidden>
+  </div>
+  <div class="tgroup">
+    <button id="btnUndo" title="Undo (Ctrl+Z)">↶</button>
+    <button id="btnRedo" title="Redo (Ctrl+Shift+Z)">↷</button>
+  </div>
+  <div class="tgroup">
+    <button id="btnRotL" title="Rotate counter-clockwise (Shift+R)">⟲</button>
+    <select id="rotStep" title="Rotation step">
+      <option value="1">1°</option><option value="7.5">7.5°</option><option value="15" selected>15°</option>
+      <option value="30">30°</option><option value="45">45°</option><option value="90">90°</option>
+    </select>
+    <button id="btnRotR" title="Rotate clockwise (R)">⟳</button>
+    <button id="btnFlip" title="Attach the last placed piece by its next endpoint (Tab)">Flip end</button>
+    <button id="btnDelete" title="Delete selection (Del)">Delete</button>
+  </div>
+  <div class="tgroup">
+    <button id="btnFit" title="Zoom to fit (F)">Fit</button>
+    <label class="toggle" title="Show part numbers"><input id="chkLabels" type="checkbox"> Labels</label>
+    <button id="btnBom" title="Parts list">Parts list</button>
+    <button id="btnHelp" title="Help">?</button>
+  </div>
+</header>
+
+<aside class="sidebar">
+  <label class="field">
+    <span>Library <small>(XTrackCAD, SourceForge)</small></span>
+    <select id="libSelect"></select>
+  </label>
+  <div id="libTitle" class="libtitle"></div>
+  <input id="partSearch" type="search" placeholder="Filter parts… (e.g. 24130, Weiche)">
+  <div id="palette" class="palette"><div class="muted pad">Loading…</div></div>
+</aside>
+
+<main class="stage">
+  <svg id="canvas" xmlns="http://www.w3.org/2000/svg">
+    <g id="world">
+      <g id="parts"></g>
+      <g id="overlay"></g>
+    </g>
+    <rect id="boxSel" class="boxsel" hidden></rect>
+  </svg>
+  <div id="emptyHint" class="emptyhint">
+    <strong>Pick a piece from the library</strong>
+    Click to place it. The next piece connects to the highlighted open end.<br>
+    Drag pieces near an open end to snap them together.
+  </div>
+</main>
+
+<footer class="status">
+  <span id="stCoords">x 0 mm · y 0 mm</span>
+  <span id="stCounts"></span>
+  <span id="stZoom"></span>
+  <span id="stHint" class="hint"></span>
+</footer>
+
+<div id="toast" class="toast" hidden></div>
+
+<dialog id="dlgOpen">
+  <form method="dialog">
+    <h2>Open layout</h2>
+    <div id="openList" class="openlist"></div>
+    <menu><button value="cancel">Close</button></menu>
+  </form>
+</dialog>
+
+<dialog id="dlgBom">
+  <form method="dialog">
+    <h2>Parts list</h2>
+    <div id="bomBody"></div>
+    <menu><button id="btnBomCsv" value="csv" type="button">Download CSV</button><button value="cancel">Close</button></menu>
+  </form>
+</dialog>
+
+<dialog id="dlgHelp">
+  <form method="dialog">
+    <h2>How to use</h2>
+    <ul class="help">
+      <li><b>Place:</b> click a piece in the library. It attaches to the highlighted open end (or appears in the centre). You can also drag it onto the canvas.</li>
+      <li><b>Flip end</b> (<kbd>Tab</kbd>): attach the last placed piece by its other endpoint, e.g. to make a curve bend right instead of left.</li>
+      <li><b>Connect:</b> drag a piece close to an open end and it snaps on. Open ends are orange; the active one (where the next piece goes) is larger and blue. Click an open end to make it active.</li>
+      <li><b>Select:</b> click a piece; <kbd>Shift</kbd>+click adds to the selection; double-click selects everything connected; <kbd>Shift</kbd>+drag on empty space draws a selection box.</li>
+      <li><b>Rotate:</b> <kbd>R</kbd> / <kbd>Shift</kbd>+<kbd>R</kbd> by the chosen step. <b>Delete:</b> <kbd>Del</kbd>.</li>
+      <li><b>View:</b> drag empty space to pan, mouse wheel to zoom, <kbd>F</kbd> to fit.</li>
+      <li><b>Undo:</b> <kbd>Ctrl</kbd>+<kbd>Z</kbd>, redo <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>. Your work is also autosaved in this browser.</li>
+    </ul>
+    <p class="muted">Track geometry comes from the XTrackCAD parameter library on SourceForge (xtrkcad-fork).</p>
+    <menu><button value="cancel">Close</button></menu>
+  </form>
+</dialog>
+
+<script type="module" src="editor.js"></script>
+</body>
+</html>
