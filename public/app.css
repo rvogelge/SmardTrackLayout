@@ -258,3 +258,10 @@ label.inline input { width: 80px; font: inherit; color: var(--text); background:
 .zoombar button:hover { background: var(--btn-hover); }
 #canvas { cursor: grab; }
 #canvas.drawing { cursor: crosshair; }
+
+dialog.wide { width: min(760px, calc(100vw - 32px)); }
+.tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+.tabs .tab.on { background: var(--accent-soft); border-color: var(--accent); }
+.licensetext { margin: 0; max-height: 58vh; overflow: auto; white-space: pre-wrap; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+dialog a { color: var(--accent); }

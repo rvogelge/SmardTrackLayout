@@ -113,7 +113,7 @@ final class SchemeHandler: NSObject, WKURLSchemeHandler {
 
     static let mime: [String: String] = [
         "html": "text/html; charset=utf-8", "js": "text/javascript; charset=utf-8", "css": "text/css; charset=utf-8",
-        "svg": "image/svg+xml", "json": "application/json", "png": "image/png", "ico": "image/x-icon",
+        "svg": "image/svg+xml", "json": "application/json", "png": "image/png", "ico": "image/x-icon", "txt": "text/plain; charset=utf-8",
     ]
 
     func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) { live.remove(ObjectIdentifier(task)) }
@@ -246,7 +246,8 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
         const afterPaste = document.querySelector('#stCounts').textContent;
                 const doc = JSON.parse(stlApp.docFor('Testname')); stlApp.savedAs('Testname');
         await new Promise(r => setTimeout(r, 100));
-        return JSON.stringify({ counts, afterPaste, piko: lib.split('\\n')[0], docName: doc.name, title: document.title, window: (window.__winTitle || '') });
+        const legal = (await (await fetch('legal/THIRD_PARTY_NOTICES.txt')).text()).split('\\n')[0] + ' / ' + (await (await fetch('legal/GPL-2.0.txt')).text()).trim().split('\\n')[0].trim();
+        return JSON.stringify({ legal, counts, afterPaste, piko: lib.split('\\n')[0], docName: doc.name, title: document.title, window: (window.__winTitle || '') });
         """
         let testFile = ProcessInfo.processInfo.environment["STL_SELFTEST_FILE"].map { URL(fileURLWithPath: $0) }
         currentURL = testFile  // pretend this layout was opened from that file, so "Save" writes there
@@ -388,6 +389,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }
 
     @objc func cmd(_ sender: NSMenuItem) { if let c = sender.representedObject as? String { wc.js(c) } }
+    @objc func showAbout(_ s: Any?) {
+        let text = """
+        Model railway track layout editor.
+
+        Track geometry: XTrackCAD parameter libraries, © the XTrackCAD developers and contributors, \
+        licensed under the GNU General Public License v2 or later. Source: sourceforge.net/p/xtrkcad-fork
+
+        Manufacturer names and article numbers (e.g. Märklin, C-Gleis) are trademarks of their owners \
+        and are used only to identify track pieces. Not affiliated with or endorsed by them.
+
+        Help ▸ Licenses shows the full notices and license text.
+        """
+        let credits = NSAttributedString(string: text, attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.labelColor])
+        NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
+        NSApp.activate(ignoringOtherApps: true)
+    }
     @objc func openXTrackCAD(_ s: Any?) { NSWorkspace.shared.open(URL(string: "https://sourceforge.net/p/xtrkcad-fork/xtrkcad/")!) }
 
     private func item(_ title: String, _ js: String, _ key: String = "", _ mods: NSEvent.ModifierFlags = .command) -> NSMenuItem {
@@ -403,7 +420,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let host = NSMenuItem(); host.submenu = m; main.addItem(host); return m
         }
         _ = sub(appName, [
-            NSMenuItem(title: "About \(appName)", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: ""),
+            NSMenuItem(title: "About \(appName)", action: #selector(showAbout(_:)), keyEquivalent: ""),
             .separator(),
             NSMenuItem(title: "Hide \(appName)", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h"),
             NSMenuItem(title: "Quit \(appName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"),
@@ -456,7 +473,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ])
         let xtc = NSMenuItem(title: "XTrackCAD Libraries on SourceForge", action: #selector(openXTrackCAD(_:)), keyEquivalent: "")
         xtc.target = self
-        let help = sub("Help", [item("\(appName) Help", "stlApp.help()", "?"), xtc])
+        let help = sub("Help", [item("\(appName) Help", "stlApp.help()", "?"), item("Licenses…", "stlApp.licenses()"), xtc])
         NSApp.mainMenu = main
         NSApp.windowsMenu = win
         NSApp.helpMenu = help

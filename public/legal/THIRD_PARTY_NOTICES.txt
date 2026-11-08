@@ -1,0 +1,52 @@
+SmardTrackLayout - Third-party notices
+=====================================
+
+Track geometry: XTrackCAD parameter libraries
+---------------------------------------------
+
+The track pieces in SmardTrackLayout (shapes, end points and part numbers)
+come from the parameter libraries (.xtp files) of the XTrackCAD project:
+
+    XTrackCAD - Model Railroad CAD
+    Project:  https://sourceforge.net/p/xtrkcad-fork/
+    Source:   https://sourceforge.net/p/xtrkcad-fork/xtrkcad/ci/default/tree/app/lib/params/
+    Website:  http://www.xtrackcad.org/
+
+XTrackCAD is copyrighted by Dave Bullis and Martin Fischer. The parameter
+files were created and maintained by the XTrackCAD developers and community
+contributors, some of whom are named in the individual files.
+
+XTrackCAD and its parameter libraries are free software. You can
+redistribute and/or modify them under the terms of the GNU General Public
+License as published by the Free Software Foundation, either version 2 of
+the License or (at your option) any later version. They are distributed
+WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+more details. A copy of the license is included in the file GPL-2.0.txt.
+
+Files included in this distribution (unmodified copies):
+
+    HO-Marklin C-Track.xtp   (Märklin C-Track, HO; English names)
+    mrklnhoc-de.xtp          (Märklin C-Gleis, HO; German names)
+
+The complete, editable source of these files is the files themselves.
+They can also be obtained from the XTrackCAD source repository linked
+above.
+
+All other libraries are not included. SmardTrackLayout downloads them on
+request from the XTrackCAD repository on SourceForge and keeps a local
+cache. Files that are not UTF-8 are converted to UTF-8 for display. Their
+content is otherwise not changed.
+
+SmardTrackLayout reads the parameter files as data with its own parser.
+It does not contain XTrackCAD program code.
+
+Trademarks
+----------
+
+Manufacturer and product names, such as Märklin, C-Gleis, K-Gleis,
+M-Gleis, Roco, Piko, Peco, Fleischmann, Tillig, Trix and Kato, and their
+article numbers, are trademarks or designations of their respective
+owners. They are used only to identify the track pieces they describe.
+SmardTrackLayout is not affiliated with or endorsed by any of these
+manufacturers or by the XTrackCAD project.

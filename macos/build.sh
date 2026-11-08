@@ -39,7 +39,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>LSMinimumSystemVersion</key><string>$MIN_OS</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.graphics-design</string>
   <key>NSHighResolutionCapable</key><true/>
-  <key>NSHumanReadableCopyright</key><string>Track geometry: XTrackCAD parameter libraries (GPL)</string>
+  <key>NSHumanReadableCopyright</key><string>Track geometry: XTrackCAD parameter libraries, GNU GPL v2 or later. Trademarks belong to their owners.</string>
 </dict></plist>
 EOF
 

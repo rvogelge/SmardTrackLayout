@@ -136,7 +136,19 @@
       <li><b>Copy / paste:</b> <kbd>Ctrl</kbd>+<kbd>C</kbd>, <kbd>Ctrl</kbd>+<kbd>X</kbd>, <kbd>Ctrl</kbd>+<kbd>V</kbd> copy, cut and paste the marked items (track and drawings; a rectangle brings its dimensions along). Paste puts them at the mouse pointer. <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicates in place, slightly offset. Works between tabs/windows too. (On a Mac: <kbd>⌘</kbd> instead of <kbd>Ctrl</kbd>.)</li>
       <li><b>Undo:</b> <kbd>Ctrl</kbd>+<kbd>Z</kbd>, redo <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>. Your work is also autosaved in this browser.</li>
     </ul>
-    <p class="muted">Track geometry comes from the XTrackCAD parameter library on SourceForge (xtrkcad-fork).</p>
+    <p class="muted">Track geometry: XTrackCAD parameter libraries (GPL&nbsp;v2 or later), from the <a href="https://sourceforge.net/p/xtrkcad-fork/" target="_blank" rel="noopener">XTrackCAD project</a> on SourceForge. Manufacturer names are trademarks of their owners.</p>
+    <menu><button id="btnLicenses" type="button">Licenses…</button><button value="cancel">Close</button></menu>
+  </form>
+</dialog>
+
+<dialog id="dlgLicenses" class="wide">
+  <form method="dialog">
+    <h2>Licenses &amp; credits</h2>
+    <div class="tabs" role="tablist">
+      <button type="button" class="tab on" data-file="legal/THIRD_PARTY_NOTICES.txt">Third-party notices</button>
+      <button type="button" class="tab" data-file="legal/GPL-2.0.txt">GNU GPL v2</button>
+    </div>
+    <pre id="licenseText" class="licensetext">Loading…</pre>
     <menu><button value="cancel">Close</button></menu>
   </form>
 </dialog>

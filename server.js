@@ -18,7 +18,7 @@ const LIST_MAX_AGE = 7 * 24 * 3600 * 1000;
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json',
-  '.ico': 'image/x-icon', '.png': 'image/png',
+  '.ico': 'image/x-icon', '.png': 'image/png', '.txt': 'text/plain; charset=utf-8',
 };
 
 await fs.mkdir(CACHE, { recursive: true });

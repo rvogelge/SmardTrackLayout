@@ -1442,6 +1442,15 @@ $('#chkLabels').onchange = (e) => { S.labels = e.target.checked; renderOverlay()
 $('#btnBom').onclick = showBom;
 $('#btnBomCsv').onclick = () => download(`${layoutName()} parts.csv`, 'Part no;Description;Manufacturer;Qty\n' + bomRows().map((r) => [r.partno, r.desc, r.mfr, r.n].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\n'), 'text/csv');
 $('#btnHelp').onclick = () => $('#dlgHelp').showModal();
+async function showLicense(file) {
+  for (const b of document.querySelectorAll('#dlgLicenses .tab')) b.classList.toggle('on', b.dataset.file === file);
+  const pre = $('#licenseText'); pre.textContent = 'Loading…';
+  pre.textContent = await fetch(file).then((r) => (r.ok ? r.text() : Promise.reject(new Error(r.statusText)))).catch((e) => 'Could not load ' + file + ': ' + e.message);
+  pre.scrollTop = 0;
+}
+function openLicenses() { $('#dlgHelp').close(); $('#dlgLicenses').showModal(); showLicense('legal/THIRD_PARTY_NOTICES.txt'); }
+$('#btnLicenses').onclick = openLicenses;
+for (const b of document.querySelectorAll('#dlgLicenses .tab')) b.onclick = () => showLicense(b.dataset.file);
 $('#btnSave').onclick = save;
 $('#btnSaveAs').onclick = saveAs;
 $('#btnOpen').onclick = openFile;
@@ -1467,6 +1476,7 @@ window.stlApp = {
   rotate: (d) => rotateSelection(d ?? step()),
   fit: fitView, partsList: showBom, help: () => $('#dlgHelp').showModal(),
   toggleLabels: () => $('#chkLabels').click(), tool: setTool,
+  licenses: () => openLicenses(),
   copy: () => copySelection(), cut: () => cutSelection(), paste: () => pasteClip(), duplicate: () => duplicateSelection(),
 };
 

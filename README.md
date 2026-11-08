@@ -45,3 +45,7 @@ The app is ad-hoc signed. On another Mac, Gatekeeper blocks it the first time; r
 - `server.js` serves the UI and proxies library files from SourceForge (`/api/library?file=…`), caching them in `/data/cache`. The library list is refreshed weekly. The two Märklin C-track libraries ship in `seed/`, so they work offline.
 - `public/xtp.js` parses `.xtp` files. It reads endpoints (`E`), straight/curved/bezier track (`S`, `C`, `W`) and outline drawing (`L`, `A`, `F`, `G`, plus the `*3` variants). Units are inches and angles are compass degrees.
 - `public/editor.js` is the SVG editor: placement, snapping, connection detection and persistence.
+
+## Licenses
+
+The track geometry comes from the XTrackCAD parameter libraries, licensed under the GNU GPL v2 or later. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The notices and the license text ship with every build: they are in `public/legal/`, shown in the app under Help ▸ Licenses, and included in the Docker image and the macOS app bundle. If you pass the app on, keep these files with it.
