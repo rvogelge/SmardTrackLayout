@@ -4,6 +4,7 @@
 // from SourceForge on demand and cached; layouts are stored as JSON files.
 import Cocoa
 import WebKit
+import UniformTypeIdentifiers
 
 let appName = "SmardTrackLayout"
 let sfParams = "https://sourceforge.net/p/xtrkcad-fork/xtrkcad/ci/default/tree/app/lib/params"
@@ -244,12 +245,21 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
         await new Promise(r => setTimeout(r, 100));
         return JSON.stringify({ counts, piko: lib.split('\\n')[0], docName: doc.name, title: document.title, window: (window.__winTitle || '') });
         """
+        let testFile = ProcessInfo.processInfo.environment["STL_SELFTEST_FILE"].map { URL(fileURLWithPath: $0) }
+        currentURL = testFile  // pretend this layout was opened from that file, so "Save" writes there
         webView.callAsyncJavaScript(test, arguments: [:], in: nil, in: .page) { r in
             switch r {
             case .success(let v): print("SELFTEST OK", v as? String ?? "\(v)", "| NSWindow.title:", self.window?.title ?? "-")
             case .failure(let e): print("SELFTEST FAIL", e)
             }
-            fflush(stdout); NSApp.terminate(nil)
+            guard let testFile else { fflush(stdout); NSApp.terminate(nil); return }
+            webView.evaluateJavaScript("stlApp.save()", completionHandler: nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                let saved = (try? String(contentsOf: testFile, encoding: .utf8)) ?? ""
+                let doc = (try? JSONSerialization.jsonObject(with: Data(saved.utf8))) as? [String: Any]
+                print("SELFTEST SAVE", doc == nil ? "FAIL (nothing written)" : "OK name=\(doc!["name"] ?? "-") parts=\((doc!["parts"] as? [Any])?.count ?? -1) title=\(self.window?.title ?? "-")")
+                fflush(stdout); NSApp.terminate(nil)
+            }
         }
     }
 
@@ -263,25 +273,75 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
 
     // Save panels for the web page: "saveAs" (layout; the chosen file name becomes the layout name)
     // and "download" (e.g. parts list CSV, content supplied by the page).
-    func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard let body = message.body as? [String: Any], let type = body["type"] as? String,
-              let name = body["name"] as? String, let window else { return }
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = name
-        panel.canCreateDirectories = true
-        panel.isExtensionHidden = false
-        panel.beginSheetModal(for: window) { r in
-            guard r == .OK, let url = panel.url else { return }
-            if type == "download", let text = body["text"] as? String { self.write(text, to: url); return }
-            guard type == "saveAs" else { return }
-            var base = url.lastPathComponent
-            for ext in [".json", ".stl"] where base.lowercased().hasSuffix(ext) { base = String(base.dropLast(ext.count)) }
-            self.webView.callAsyncJavaScript("return stlApp.docFor(n)", arguments: ["n": base], in: nil, in: .page) { res in
-                guard case .success(let v) = res, let text = v as? String else { return }
-                if self.write(text, to: url) {
-                    self.webView.callAsyncJavaScript("stlApp.savedAs(n)", arguments: ["n": base], in: nil, in: .page, completionHandler: nil)
-                }
+    // File handling for the web page. The app remembers the current file, so "save" writes back
+    // to it; "saveAs" / "open" use the standard panels; "download" saves page-supplied content (CSV).
+    private var currentURL: URL?
+
+    private static func layoutBase(_ url: URL) -> String {
+        var base = url.lastPathComponent
+        for ext in [".json", ".stl"] where base.lowercased().hasSuffix(ext) { base = String(base.dropLast(ext.count)) }
+        return base
+    }
+
+    private func saveLayout(to url: URL, name: String) {
+        webView.callAsyncJavaScript("return stlApp.docFor(n)", arguments: ["n": name], in: nil, in: .page) { res in
+            guard case .success(let v) = res, let text = v as? String else { return }
+            if self.write(text, to: url) {
+                self.currentURL = url
+                self.window?.representedURL = url
+                self.webView.callAsyncJavaScript("stlApp.savedAs(n)", arguments: ["n": name], in: nil, in: .page, completionHandler: nil)
             }
+        }
+    }
+
+    func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let body = message.body as? [String: Any], let type = body["type"] as? String, let window else { return }
+        let name = body["name"] as? String ?? "Untitled.stl.json"
+
+        switch type {
+        case "new":
+            currentURL = nil; window.representedURL = nil
+            return
+        case "save":
+            if let url = currentURL {
+                // keep the layout name typed in the editor; write to the same file
+                webView.callAsyncJavaScript("return stlApp.name()", arguments: [:], in: nil, in: .page) { res in
+                    let n = (try? res.get()) as? String ?? Self.layoutBase(url)
+                    self.saveLayout(to: url, name: n)
+                }
+                return
+            }
+            fallthrough // no file yet: behave like Save As
+        case "saveAs", "download":
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = name
+            panel.canCreateDirectories = true
+            panel.isExtensionHidden = false
+            if type != "download", let dir = currentURL?.deletingLastPathComponent() { panel.directoryURL = dir }
+            panel.beginSheetModal(for: window) { r in
+                guard r == .OK, let url = panel.url else { return }
+                if type == "download" { if let text = body["text"] as? String { self.write(text, to: url) }; return }
+                self.saveLayout(to: url, name: Self.layoutBase(url))
+            }
+        case "open":
+            let panel = NSOpenPanel()
+            panel.allowedContentTypes = [.json]
+            panel.allowsMultipleSelection = false
+            if let dir = currentURL?.deletingLastPathComponent() { panel.directoryURL = dir }
+            panel.beginSheetModal(for: window) { r in
+                guard r == .OK, let url = panel.url else { return }
+                do {
+                    let text = try String(contentsOf: url, encoding: .utf8)
+                    let n = Self.layoutBase(url)
+                    self.webView.callAsyncJavaScript("await stlApp.openText(t, n)", arguments: ["t": text, "n": n], in: nil, in: .page) { res in
+                        if case .failure(let e) = res {
+                            let a = NSAlert(); a.messageText = "Could not open “\(url.lastPathComponent)”"; a.informativeText = e.localizedDescription
+                            a.beginSheetModal(for: window)
+                        } else { self.currentURL = url; window.representedURL = url }
+                    }
+                } catch { NSAlert(error: error).beginSheetModal(for: window) }
+            }
+        default: return
         }
     }
 
@@ -348,7 +408,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = sub("File", [
             item("New Layout", "stlApp.newLayout()", "n"),
             item("Open…", "stlApp.openFile()", "o"),
-            item("Save As…", "stlApp.saveAs()", "s"),
+            .separator(),
+            item("Save", "stlApp.save()", "s"),
+            item("Save As…", "stlApp.saveAs()", "s", [.command, .shift]),
             .separator(),
             NSMenuItem(title: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"),
         ])

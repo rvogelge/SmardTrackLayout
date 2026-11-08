@@ -14,7 +14,8 @@
     <input id="layoutName" class="name" value="Untitled" title="Layout name" spellcheck="false">
     <button id="btnNew" title="New layout">New</button>
     <button id="btnOpen" title="Open a layout file (Ctrl+O)">Open…</button>
-    <button id="btnSave" class="primary" title="Save the layout to a file (Ctrl+S)">Save as…</button>
+    <button id="btnSave" title="Save to the current file (Ctrl+S)">Save</button>
+    <button id="btnSaveAs" title="Save to a new file (Ctrl+Shift+S)">Save as…</button>
     <input id="fileImport" type="file" accept=".json,application/json" hidden>
   </div>
   <div class="tgroup">
@@ -130,7 +131,7 @@
       <li><b>Rotate:</b> drag the round handle above the selection (snaps to the angle field; hold <kbd>Shift</kbd> for free rotation), or <kbd>R</kbd> / <kbd>Shift</kbd>+<kbd>R</kbd> by the angle in the toolbar (type any value). <kbd>Ctrl</kbd>+<kbd>A</kbd> then rotate turns the whole design. <b>Delete:</b> <kbd>Del</kbd>.</li>
       <li><b>Draw</b> (toolbar on the canvas): line <kbd>L</kbd>, polyline <kbd>P</kbd>, rectangle <kbd>B</kbd>, circle <kbd>O</kbd>, dimension <kbd>D</kbd>, text <kbd>T</kbd>, back to select <kbd>V</kbd>/<kbd>Esc</kbd>. Points snap to the grid, to corners and to track ends. While drawing, type a length in mm (rectangle: <code>2400x1200</code>) and press <kbd>Enter</kbd>; <kbd>Shift</kbd> locks to 15° steps. Select a single drawing to drag its corner handles; double-click text to edit it.</li>
       <li><b>Rectangle size:</b> mark a rectangle and type Size X / Size Y in the panel at the top right (<kbd>Enter</kbd> jumps into it). Rectangles: drag a side line to change only the size in that direction, drag a corner to change both (it stays a rectangle), drag inside a marked rectangle to move it. Their dimensions follow.</li>
-      <li><b>Save as…</b> (<kbd>Ctrl</kbd>+<kbd>S</kbd>) writes the layout to a file, <b>Open…</b> (<kbd>Ctrl</kbd>+<kbd>O</kbd>) loads one. Your current work is also kept automatically between sessions.</li>
+      <li><b>Save</b> (<kbd>Ctrl</kbd>+<kbd>S</kbd>) writes to the file the layout was opened from or last saved to; <b>Save as…</b> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) chooses a new file. <b>Open…</b> (<kbd>Ctrl</kbd>+<kbd>O</kbd>) loads a file. (Browsers other than Chrome/Edge can only download, so there Save works like Save as….) Your current work is also kept automatically between sessions.</li>
       <li><b>Move the workspace:</b> drag on empty space, or swipe with two fingers on the trackpad (also right/middle-drag, or <kbd>Space</kbd>+drag while drawing). <b>Zoom:</b> mouse wheel, pinch on the trackpad, <kbd>+</kbd>/<kbd>−</kbd>, or the buttons bottom right; <kbd>F</kbd> fits everything.</li>
       <li><b>Undo:</b> <kbd>Ctrl</kbd>+<kbd>Z</kbd>, redo <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>. Your work is also autosaved in this browser.</li>
     </ul>

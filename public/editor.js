@@ -1164,7 +1164,7 @@ document.addEventListener('keydown', (ev) => {
   if (S.drag?.mode === 'box' && k === 'escape') { cancelBox(); return; }
   if (mod && k === 'z') { ev.preventDefault(); ev.shiftKey ? redo() : undo(); return; }
   if (mod && k === 'y') { ev.preventDefault(); redo(); return; }
-  if (mod && k === 's') { ev.preventDefault(); saveAs(); return; }
+  if (mod && k === 's') { ev.preventDefault(); ev.shiftKey ? saveAs() : save(); return; }
   if (mod && k === 'o') { ev.preventDefault(); openFile(); return; }
   if (!mod && k === 'enter' && S.tool === 'select') {
     const f = $('#props:not([hidden]) input'); if (f) { ev.preventDefault(); f.focus(); f.select(); return; }
@@ -1246,20 +1246,38 @@ function scheduleAutosave() {
   }, 400);
 }
 
-// Save as…: write the layout to a file; the chosen file name becomes the layout name
+// Files. "Save" writes back to the file the layout came from (macOS app, or Chrome/Edge via the
+// File System Access API); "Save as…" picks a new file, whose name becomes the layout name.
 const baseName = (f) => String(f).split(/[\\/]/).pop().replace(/\.json$/i, '').replace(/\.stl$/i, '');
+const FILE_TYPES = [{ description: 'SmardTrackLayout layout', accept: { 'application/json': ['.json'] } }];
+let fileHandle = null;   // browser: handle of the current file (when supported)
+let hasFile = false;     // a current file exists (browser handle or file known to the macOS app)
+
 function docFor(name) { $('#layoutName').value = name; return JSON.stringify(layoutDoc(), null, 1); }
-function savedAs(name) { $('#layoutName').value = name; S.dirty = false; updateStatus(); toast(`Saved “${name}”`); }
+function savedAs(name) { $('#layoutName').value = name; hasFile = true; S.dirty = false; updateStatus(); toast(`Saved “${name}”`); }
+async function openText(text, name) { // used by the macOS app after its open panel
+  await loadDoc(JSON.parse(text)); $('#layoutName').value = name; hasFile = true; S.dirty = false; updateStatus();
+}
+
+async function save() {
+  if (native) { native.postMessage({ type: 'save', name: layoutName() + '.stl.json' }); return; } // app: same file, or save panel
+  if (!fileHandle) return saveAs();
+  try {
+    const w = await fileHandle.createWritable();
+    await w.write(docFor(layoutName())); await w.close();
+    savedAs(layoutName());
+  } catch (e) { if (e.name !== 'AbortError') toast('Save failed: ' + e.message, 5000); }
+}
 
 async function saveAs() {
   const name = layoutName();
   if (native) { native.postMessage({ type: 'saveAs', name: name + '.stl.json' }); return; } // app shows the save panel, then calls docFor/savedAs
   if (window.showSaveFilePicker) {
     try {
-      const h = await window.showSaveFilePicker({ suggestedName: name + '.stl.json', types: [{ description: 'SmardTrackLayout layout', accept: { 'application/json': ['.json'] } }] });
+      const h = await window.showSaveFilePicker({ suggestedName: name + '.stl.json', types: FILE_TYPES });
       const n = baseName(h.name), w = await h.createWritable();
       await w.write(docFor(n)); await w.close();
-      savedAs(n);
+      fileHandle = h; savedAs(n);
     } catch (e) { if (e.name !== 'AbortError') toast('Save failed: ' + e.message, 5000); }
     return;
   }
@@ -1272,13 +1290,25 @@ async function saveAs() {
     const n = input.value.trim();
     if (dlg.returnValue !== 'ok' || !n) return;
     download(n + '.stl.json', docFor(n), 'application/json');
-    savedAs(n);
+    savedAs(n); hasFile = false;
   };
 }
-const openFile = () => {
+
+async function openFile() {
   if (S.dirty && S.parts.length + S.shapes.length && !confirm('Discard unsaved changes to the current layout?')) return;
+  if (native) { native.postMessage({ type: 'open' }); return; }
+  if (window.showOpenFilePicker) {
+    try {
+      const [h] = await window.showOpenFilePicker({ types: FILE_TYPES });
+      const f = await h.getFile();
+      await loadDoc(JSON.parse(await f.text()));
+      fileHandle = h; hasFile = true;
+      $('#layoutName').value = baseName(f.name); S.dirty = false; updateStatus();
+    } catch (e) { if (e.name !== 'AbortError') toast('Open failed: ' + e.message, 5000); }
+    return;
+  }
   $('#fileImport').click();
-};
+}
 
 function download(name, text, type) {
   if (native) { native.postMessage({ type: 'download', name, text }); return; }
@@ -1307,6 +1337,7 @@ function showBom() {
 
 function newLayout() {
   if (S.dirty && S.parts.length + S.shapes.length && !confirm('Start a new layout? Unsaved changes in the current one are lost.')) return;
+  fileHandle = null; hasFile = false; native?.postMessage({ type: 'new' });
   loadDoc({ name: 'Untitled', parts: [], shapes: [] }).then(() => { S.dirty = false; updateStatus(); });
 }
 
@@ -1326,12 +1357,13 @@ $('#chkLabels').onchange = (e) => { S.labels = e.target.checked; renderOverlay()
 $('#btnBom').onclick = showBom;
 $('#btnBomCsv').onclick = () => download(`${layoutName()} parts.csv`, 'Part no;Description;Manufacturer;Qty\n' + bomRows().map((r) => [r.partno, r.desc, r.mfr, r.n].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\n'), 'text/csv');
 $('#btnHelp').onclick = () => $('#dlgHelp').showModal();
-$('#btnSave').onclick = saveAs;
+$('#btnSave').onclick = save;
+$('#btnSaveAs').onclick = saveAs;
 $('#btnOpen').onclick = openFile;
 $('#btnNew').onclick = newLayout;
 $('#fileImport').onchange = async (e) => {
   const f = e.target.files[0]; if (!f) return;
-  try { await loadDoc(JSON.parse(await f.text())); $('#layoutName').value = baseName(f.name); S.dirty = false; updateStatus(); } catch (err) { toast('Open failed: ' + err.message, 5000); }
+  try { await loadDoc(JSON.parse(await f.text())); fileHandle = null; hasFile = false; $('#layoutName').value = baseName(f.name); S.dirty = false; updateStatus(); } catch (err) { toast('Open failed: ' + err.message, 5000); }
   e.target.value = '';
 };
 $('#layoutName').addEventListener('change', () => { S.dirty = true; updateStatus(); });
@@ -1344,7 +1376,7 @@ window.addEventListener('beforeunload', (e) => { if (!native && S.dirty && S.par
 // API for the macOS app menus
 const inField = () => document.activeElement?.matches?.('input, textarea');
 window.stlApp = {
-  newLayout, open: openFile, openFile, save: saveAs, saveAs, saveToFile: saveAs, docFor, savedAs,
+  newLayout, open: openFile, openFile, save, saveAs, saveToFile: saveAs, docFor, savedAs, openText, name: layoutName,
   undo: () => (inField() ? document.execCommand('undo') : undo()),
   redo: () => (inField() ? document.execCommand('redo') : redo()),
   rotate: (d) => rotateSelection(d ?? step()),
