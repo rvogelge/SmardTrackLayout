@@ -1,3 +1,13 @@
+// SmardTrackLayout - model railway track layout editor
+// Copyright (C) 2026 Rolf Vogelgesang
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of
+// the GNU General Public License as published by the Free Software Foundation, either
+// version 3 of the License, or (at your option) any later version. It is distributed
+// WITHOUT ANY WARRANTY; see the GNU General Public License for details (file LICENSE).
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // SmardTrackLayout server: serves the editor, proxies + caches XTrackCAD
 // parameter files from SourceForge, and stores layouts on disk.
 import http from 'node:http';

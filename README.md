@@ -46,6 +46,12 @@ The app is ad-hoc signed. On another Mac, Gatekeeper blocks it the first time; r
 - `public/xtp.js` parses `.xtp` files. It reads endpoints (`E`), straight/curved/bezier track (`S`, `C`, `W`) and outline drawing (`L`, `A`, `F`, `G`, plus the `*3` variants). Units are inches and angles are compass degrees.
 - `public/editor.js` is the SVG editor: placement, snapping, connection detection and persistence.
 
-## Licenses
+## License
+
+SmardTrackLayout is free software: you can redistribute it and/or modify it under the terms of the
+**GNU General Public License v3.0 or later**. See [LICENSE](LICENSE).
+Copyright © 2026 Rolf Vogelgesang. It comes with no warranty.
+
+### Third-party components
 
 The track geometry comes from the XTrackCAD parameter libraries, licensed under the GNU GPL v2 or later. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The notices and the license text ship with every build: they are in `public/legal/`, shown in the app under Help ▸ Licenses, and included in the Docker image and the macOS app bundle. If you pass the app on, keep these files with it.

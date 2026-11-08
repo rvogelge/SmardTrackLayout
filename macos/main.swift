@@ -1,3 +1,13 @@
+// SmardTrackLayout - model railway track layout editor
+// Copyright (C) 2026 Rolf Vogelgesang
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of
+// the GNU General Public License as published by the Free Software Foundation, either
+// version 3 of the License, or (at your option) any later version. It is distributed
+// WITHOUT ANY WARRANTY; see the GNU General Public License for details (file LICENSE).
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // SmardTrackLayout for macOS — a native shell around the web editor.
 // The editor's /api requests are answered in-process by a WKURLSchemeHandler,
 // so the app works standalone (no server, no Node). Library files are fetched
@@ -392,6 +402,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func showAbout(_ s: Any?) {
         let text = """
         Model railway track layout editor.
+        © 2026 Rolf Vogelgesang. Free software under the GNU General Public License v3 or later; \
+        it comes with ABSOLUTELY NO WARRANTY. Source: github.com/rvogelge/SmardTrackLayout
 
         Track geometry: XTrackCAD parameter libraries, © the XTrackCAD developers and contributors, \
         licensed under the GNU General Public License v2 or later. Source: sourceforge.net/p/xtrkcad-fork

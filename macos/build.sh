@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# SmardTrackLayout - model railway track layout editor
+# Copyright (C) 2026 Rolf Vogelgesang
+#
+# This program is free software: you can redistribute it and/or modify it under the terms of
+# the GNU General Public License as published by the Free Software Foundation, either
+# version 3 of the License, or (at your option) any later version. It is distributed
+# WITHOUT ANY WARRANTY; see the GNU General Public License for details (file LICENSE).
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Builds dist/SmardTrackLayout.app (universal: Apple silicon + Intel) and a zip of it.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -39,7 +48,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>LSMinimumSystemVersion</key><string>$MIN_OS</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.graphics-design</string>
   <key>NSHighResolutionCapable</key><true/>
-  <key>NSHumanReadableCopyright</key><string>Track geometry: XTrackCAD parameter libraries, GNU GPL v2 or later. Trademarks belong to their owners.</string>
+  <key>NSHumanReadableCopyright</key><string>© 2026 Rolf Vogelgesang · GNU GPL v3 or later. Track geometry: XTrackCAD (GPL v2+).</string>
 </dict></plist>
 EOF
 

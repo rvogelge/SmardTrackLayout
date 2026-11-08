@@ -1,5 +1,7 @@
 # Third-party notices
 
+SmardTrackLayout itself is licensed under the GNU GPL v3.0 or later (see [LICENSE](LICENSE)). It includes or uses the following third-party material.
+
 The track geometry comes from the **XTrackCAD parameter libraries** (`.xtp` files) of the
 [XTrackCAD project](https://sourceforge.net/p/xtrkcad-fork/). They are licensed under the
 **GNU General Public License, version 2 or (at your option) any later version**.

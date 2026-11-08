@@ -1,3 +1,13 @@
+// SmardTrackLayout - model railway track layout editor
+// Copyright (C) 2026 Rolf Vogelgesang
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of
+// the GNU General Public License as published by the Free Software Foundation, either
+// version 3 of the License, or (at your option) any later version. It is distributed
+// WITHOUT ANY WARRANTY; see the GNU General Public License for details (file LICENSE).
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import { parseXtp, partPaths } from './xtp.js';
 
 const $ = (s) => document.querySelector(s);
@@ -1448,7 +1458,7 @@ async function showLicense(file) {
   pre.textContent = await fetch(file).then((r) => (r.ok ? r.text() : Promise.reject(new Error(r.statusText)))).catch((e) => 'Could not load ' + file + ': ' + e.message);
   pre.scrollTop = 0;
 }
-function openLicenses() { $('#dlgHelp').close(); $('#dlgLicenses').showModal(); showLicense('legal/THIRD_PARTY_NOTICES.txt'); }
+function openLicenses() { $('#dlgHelp').close(); $('#dlgLicenses').showModal(); showLicense('legal/NOTICE.txt'); }
 $('#btnLicenses').onclick = openLicenses;
 for (const b of document.querySelectorAll('#dlgLicenses .tab')) b.onclick = () => showLicense(b.dataset.file);
 $('#btnSave').onclick = save;
