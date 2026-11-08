@@ -842,6 +842,7 @@ function propFields(s) {
 const PROP_TITLES = { line: 'Line', circle: 'Circle', dim: 'Dimension', text: 'Text', poly: 'Polyline' };
 function renderProps() {
   const s = S.tool === 'select' && S.sel.size === 1 ? shapeById([...S.sel][0]) : null;
+  if (s && !isRect(s)) { propsEl.hidden = true; propsKey = ''; return; }
   if (!s) { propsEl.hidden = true; propsKey = ''; return; }
   const fields = propFields(s);
   const key = s.id + ':' + fields.map((f) => f.key).join(',');
@@ -904,6 +905,7 @@ svg.addEventListener('pointerdown', (ev) => {
 
   const endEl = ev.target.closest('.end');
   const itemEl = ev.target.closest('.part, .shape');
+  if (!endEl && !itemEl && !ev.shiftKey) return startPan(ev);
   if (endEl) {
     S.active = { pid: +endEl.dataset.pid, i: +endEl.dataset.i };
     renderOverlay(); updateStatus(); return;
@@ -926,8 +928,8 @@ svg.addEventListener('pointerdown', (ev) => {
     S.drag = { mode: 'move', wx, wy, ids, orig: clone(selectedItems()), moved: false, sx: ev.clientX, sy: ev.clientY };
     return;
   }
-  // empty space: rubber-band selection (Shift adds to the current selection)
-  S.drag = { mode: 'box', sx: ev.clientX, sy: ev.clientY, wx, wy, add: ev.shiftKey, hits: new Set() };
+  // Shift + drag on empty space: mark an area (Shift+Ctrl/Cmd adds to the current marking)
+  S.drag = { mode: 'box', sx: ev.clientX, sy: ev.clientY, wx, wy, add: ev.ctrlKey || ev.metaKey, hits: new Set() };
 });
 
 const boxEl = $('#boxSel');
@@ -1063,11 +1065,13 @@ function endDrag(ev) {
   $('#measure').hidden = S.tool === 'select' || !S.draft;
   if (!D) return;
   if (D.mode === 'pan') S.lastPanMoved = D.moved;
+  // a click (no drag) on empty space unmarks
+  if (D.mode === 'pan' && !D.moved && ev.type === 'pointerup' && ev.button === 0 && S.tool === 'select') { S.sel.clear(); S.lastPlace = null; renderSelection(); renderUI(); updateStatus(); }
   if (['move', 'rotate', 'vertex', 'off', 'redge', 'rcorner'].includes(D.mode)) { S.snap = null; normalizeRects(); renderShapes(); refresh(); }
   if (D.mode === 'box') {
     showBox(false); clearPresel();
     if (ev.type !== 'pointerup') return;
-    if (!D.moved) { if (!D.add) { S.sel.clear(); S.lastPlace = null; } }  // plain click on empty space: unmark
+    if (!D.moved) { /* Shift-click on empty space: keep the marking */ }
     else S.sel = D.add ? new Set([...S.sel, ...D.hits]) : D.hits;
     renderSelection(); renderUI(); updateStatus();
   }
@@ -1094,13 +1098,38 @@ svg.addEventListener('dblclick', (ev) => {
   S.sel = connectedGroup(id); renderSelection(); renderUI(); updateStatus();
 });
 
+// zoom by factor k keeping the screen point (sx, sy) fixed
+function zoomAt(sx, sy, k) {
+  const z0 = S.view.z, z = Math.min(400, Math.max(0.6, z0 * k));
+  S.view.tx = sx - (sx - S.view.tx) * (z / z0); S.view.ty = sy - (sy - S.view.ty) * (z / z0); S.view.z = z;
+  applyView();
+}
+function zoomCenter(k) { const r = svg.getBoundingClientRect(); zoomAt(r.width / 2, r.height / 2, k); }
+
+// Mouse wheel zooms. Trackpad: two-finger swipe pans, pinch zooms (Chrome sends pinch as ctrl+wheel).
+let trackpadUntil = 0;
 svg.addEventListener('wheel', (ev) => {
   ev.preventDefault();
   const r = svg.getBoundingClientRect(), sx = ev.clientX - r.left, sy = ev.clientY - r.top;
-  const z0 = S.view.z, z = Math.min(400, Math.max(0.6, z0 * Math.exp(-ev.deltaY * (ev.ctrlKey ? 0.01 : 0.0015))));
-  S.view.tx = sx - (sx - S.view.tx) * (z / z0); S.view.ty = sy - (sy - S.view.ty) * (z / z0); S.view.z = z;
-  applyView();
+  if (ev.ctrlKey || ev.metaKey || ev.altKey) return zoomAt(sx, sy, Math.exp(-ev.deltaY * (ev.ctrlKey ? 0.01 : 0.0025)));
+  const now = performance.now();
+  const mouseNotch = ev.deltaX === 0 && ev.wheelDeltaY && ev.wheelDeltaY % 120 === 0; // classic wheel steps
+  const trackpad = ev.deltaX !== 0 || now < trackpadUntil || (!mouseNotch &&
+    (ev.wheelDeltaY !== undefined ? (ev.wheelDeltaY === -3 * ev.deltaY || Math.abs(ev.wheelDeltaY) < 60) : ev.deltaMode === 0 && !Number.isInteger(ev.deltaY)));
+  if (trackpad) {
+    trackpadUntil = now + 250;  // keep treating the rest of this swipe as panning
+    S.view.tx -= ev.deltaX; S.view.ty -= ev.deltaY; applyView();
+    return;
+  }
+  zoomAt(sx, sy, Math.exp(-ev.deltaY * (ev.deltaMode === 1 ? 0.05 : 0.0015)));
 }, { passive: false });
+
+// Safari / macOS app: pinch arrives as gesture events
+let gestureScale = 1;
+const gesturePoint = (ev) => { const r = svg.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; };
+document.addEventListener('gesturestart', (ev) => { ev.preventDefault(); gestureScale = 1; });
+document.addEventListener('gesturechange', (ev) => { ev.preventDefault(); const [x, y] = gesturePoint(ev); zoomAt(x, y, ev.scale / gestureScale); gestureScale = ev.scale; });
+document.addEventListener('gestureend', (ev) => ev.preventDefault());
 
 svg.addEventListener('dragover', (ev) => { if (ev.dataTransfer.types.includes('text/x-stl-part')) { ev.preventDefault(); ev.dataTransfer.dropEffect = 'copy'; } });
 svg.addEventListener('drop', (ev) => {
@@ -1163,6 +1192,8 @@ document.addEventListener('keydown', (ev) => {
   else if (k === 'r') rotateSelection(ev.shiftKey ? -step() : step());
   else if (k === 'tab') { ev.preventDefault(); flipLast(); }
   else if (k === 'f') fitView();
+  else if (k === '+' || k === '=') zoomCenter(1.25);
+  else if (k === '-') zoomCenter(0.8);
 });
 document.addEventListener('keyup', (ev) => { if (ev.key === ' ') S.space = false; });
 const step = () => { const v = parseFloat(String($('#rotStep').value).replace(',', '.')); return v > 0 ? v : 15; };
@@ -1288,6 +1319,9 @@ $('#btnRotR').onclick = () => rotateSelection(step());
 $('#btnFlip').onclick = flipLast;
 $('#btnDelete').onclick = deleteSelection;
 $('#btnFit').onclick = fitView;
+$('#zoomIn').onclick = () => zoomCenter(1.25);
+$('#zoomOut').onclick = () => zoomCenter(0.8);
+$('#zoomFit').onclick = fitView;
 $('#chkLabels').onchange = (e) => { S.labels = e.target.checked; renderOverlay(); };
 $('#btnBom').onclick = showBom;
 $('#btnBomCsv').onclick = () => download(`${layoutName()} parts.csv`, 'Part no;Description;Manufacturer;Qty\n' + bomRows().map((r) => [r.partno, r.desc, r.mfr, r.n].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\n'), 'text/csv');
