@@ -22,6 +22,95 @@ let scheme = "stl"
 
 struct APIError: Error { let status: Int; let message: String }
 
+// MARK: - Preferences and menu language
+
+/// App-level preferences. The web editor keeps its own settings (language, default library) in
+/// WebKit storage; the app mirrors the language for its menus and owns the data folder.
+enum Prefs {
+    static let selftest = ProcessInfo.processInfo.environment["STL_SELFTEST"] != nil
+    /// the self-test must not change the user's preferences
+    static let d: UserDefaults = {
+        guard selftest, let t = UserDefaults(suiteName: "com.github.rvogelge.smardtracklayout.selftest") else { return .standard }
+        t.removePersistentDomain(forName: "com.github.rvogelge.smardtracklayout.selftest")
+        return t
+    }()
+    static let languages = ["en", "de", "fr", "it", "es"]
+    static var langPref: String { get { d.string(forKey: "lang") ?? "auto" } set { d.set(newValue, forKey: "lang") } }
+    static var lang: String {
+        if languages.contains(langPref) { return langPref }
+        for l in Locale.preferredLanguages { let k = String(l.prefix(2)).lowercased(); if languages.contains(k) { return k } }
+        return "en"
+    }
+    static var documents: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0] }
+    /// custom data folder, or nil for Documents
+    static var customDataDir: URL? {
+        get {
+            guard let p = d.string(forKey: "dataDir"), FileManager.default.fileExists(atPath: p) else { return nil }
+            return URL(fileURLWithPath: p, isDirectory: true)
+        }
+        set { if let u = newValue { d.set(u.path, forKey: "dataDir") } else { d.removeObject(forKey: "dataDir") } }
+    }
+    static var dataDir: URL { customDataDir ?? documents }
+}
+
+/// menu / dialog texts: English key → [de, fr, it, es]
+let menuTexts: [String: [String]] = [
+    "About %@": ["Über %@", "À propos de %@", "Informazioni su %@", "Acerca de %@"],
+    "Settings…": ["Einstellungen…", "Réglages…", "Impostazioni…", "Ajustes…"],
+    "Hide %@": ["%@ ausblenden", "Masquer %@", "Nascondi %@", "Ocultar %@"],
+    "Quit %@": ["%@ beenden", "Quitter %@", "Esci da %@", "Salir de %@"],
+    "File": ["Ablage", "Fichier", "File", "Archivo"],
+    "New Layout": ["Neuer Gleisplan", "Nouveau plan", "Nuovo tracciato", "Nueva maqueta"],
+    "Open…": ["Öffnen…", "Ouvrir…", "Apri…", "Abrir…"],
+    "Save": ["Sichern", "Enregistrer", "Salva", "Guardar"],
+    "Save As…": ["Sichern unter…", "Enregistrer sous…", "Salva come…", "Guardar como…"],
+    "Close Window": ["Fenster schließen", "Fermer la fenêtre", "Chiudi finestra", "Cerrar ventana"],
+    "Edit": ["Bearbeiten", "Édition", "Modifica", "Edición"],
+    "Undo": ["Widerrufen", "Annuler", "Annulla", "Deshacer"],
+    "Redo": ["Wiederholen", "Rétablir", "Ripeti", "Rehacer"],
+    "Cut": ["Ausschneiden", "Couper", "Taglia", "Cortar"],
+    "Copy": ["Kopieren", "Copier", "Copia", "Copiar"],
+    "Paste": ["Einsetzen", "Coller", "Incolla", "Pegar"],
+    "Select All": ["Alles auswählen", "Tout sélectionner", "Seleziona tutto", "Seleccionar todo"],
+    "Duplicate": ["Duplizieren", "Dupliquer", "Duplica", "Duplicar"],
+    "Arrange": ["Anordnen", "Disposition", "Disponi", "Organizar"],
+    "Rotate Clockwise": ["Im Uhrzeigersinn drehen", "Pivoter dans le sens horaire", "Ruota in senso orario", "Girar en sentido horario"],
+    "Rotate Counter-Clockwise": ["Gegen den Uhrzeigersinn drehen", "Pivoter dans le sens antihoraire", "Ruota in senso antiorario", "Girar en sentido antihorario"],
+    "Rotate 90° Clockwise": ["Um 90° im Uhrzeigersinn drehen", "Pivoter de 90° (sens horaire)", "Ruota di 90° in senso orario", "Girar 90° en sentido horario"],
+    "Rotate 180°": ["Um 180° drehen", "Pivoter de 180°", "Ruota di 180°", "Girar 180°"],
+    "Tools": ["Werkzeuge", "Outils", "Strumenti", "Herramientas"],
+    "Select / Move": ["Auswählen / Verschieben", "Sélectionner / Déplacer", "Seleziona / Sposta", "Seleccionar / Mover"],
+    "Line": ["Linie", "Ligne", "Linea", "Línea"],
+    "Polyline / Outline": ["Polylinie / Umriss", "Polyligne / Contour", "Polilinea / Contorno", "Polilínea / Contorno"],
+    "Rectangle": ["Rechteck", "Rectangle", "Rettangolo", "Rectángulo"],
+    "Circle": ["Kreis", "Cercle", "Cerchio", "Círculo"],
+    "Dimension": ["Bemaßung", "Cote", "Quota", "Cota"],
+    "Text": ["Text", "Texte", "Testo", "Texto"],
+    "View": ["Darstellung", "Présentation", "Vista", "Visualización"],
+    "Zoom to Fit": ["Alles einpassen", "Tout afficher", "Mostra tutto", "Ver todo"],
+    "Toggle Part Labels": ["Artikelnummern ein/aus", "Afficher/masquer les références", "Mostra/nascondi codici", "Mostrar/ocultar referencias"],
+    "Parts List": ["Stückliste", "Liste des pièces", "Distinta dei pezzi", "Lista de piezas"],
+    "Enter Full Screen": ["Vollbildmodus", "Plein écran", "Modalità a tutto schermo", "Pantalla completa"],
+    "Window": ["Fenster", "Fenêtre", "Finestra", "Ventana"],
+    "Minimize": ["Im Dock ablegen", "Placer dans le Dock", "Contrai", "Minimizar"],
+    "Zoom": ["Zoomen", "Réduire/agrandir", "Ridimensiona", "Zoom"],
+    "Help": ["Hilfe", "Aide", "Aiuto", "Ayuda"],
+    "%@ Help": ["%@-Hilfe", "Aide %@", "Aiuto di %@", "Ayuda de %@"],
+    "Licenses…": ["Lizenzen…", "Licences…", "Licenze…", "Licencias…"],
+    "XTrackCAD Libraries on SourceForge": ["XTrackCAD-Bibliotheken auf SourceForge", "Bibliothèques XTrackCAD sur SourceForge", "Librerie XTrackCAD su SourceForge", "Bibliotecas XTrackCAD en SourceForge"],
+    "Could not open “%@”": ["„%@“ konnte nicht geöffnet werden", "Impossible d’ouvrir « %@ »", "Impossibile aprire «%@»", "No se pudo abrir «%@»"],
+    "Default data folder": ["Standard-Datenordner", "Dossier de données par défaut", "Cartella dati predefinita", "Carpeta de datos predeterminada"],
+    "Choose": ["Auswählen", "Choisir", "Scegli", "Elegir"],
+    "Cancel": ["Abbrechen", "Annuler", "Annulla", "Cancelar"],
+]
+func L(_ key: String, _ arg: String? = nil) -> String {
+    var s = key
+    if let i = Prefs.languages.firstIndex(of: Prefs.lang), i > 0, let tr = menuTexts[key] { s = tr[i - 1] }
+    if let arg { s = s.replacingOccurrences(of: "%@", with: arg) }
+    return s
+}
+func abbreviate(_ url: URL) -> String { (url.path as NSString).abbreviatingWithTildeInPath }
+
 // MARK: - Storage
 
 final class Store {
@@ -216,6 +305,7 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
         // the self-test must never touch the user's autosaved work
         if ProcessInfo.processInfo.environment["STL_SELFTEST"] != nil { cfg.websiteDataStore = .nonPersistent() }
         let ucc = WKUserContentController()
+        ucc.addUserScript(WKUserScript(source: Self.nativeInfoScript(), injectionTime: .atDocumentStart, forMainFrameOnly: true))
         cfg.userContentController = ucc
         webView = WKWebView(frame: .zero, configuration: cfg)
         let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1400, height: 900),
@@ -239,6 +329,21 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
     }
     required init?(coder: NSCoder) { fatalError() }
 
+    /// tells the page about the data folder before its scripts run
+    static func nativeInfoScript() -> String {
+        let info: [String: Any] = ["dataDir": Prefs.customDataDir.map(abbreviate) ?? NSNull(), "documents": abbreviate(Prefs.documents)]
+        let json = String(data: (try? JSONSerialization.data(withJSONObject: info)) ?? Data("{}".utf8), encoding: .utf8) ?? "{}"
+        return "window.__stlNative = \(json);"
+    }
+    /// called when the page changes its language setting, so the menus follow
+    var onLanguageChange: (() -> Void)?
+
+    // links with target=_blank (e.g. the commit link in Settings) open in the browser
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if let url = action.request.url, url.scheme == "http" || url.scheme == "https" { NSWorkspace.shared.open(url) }
+        return nil
+    }
+
     func js(_ code: String) { webView.evaluateJavaScript("window.stlApp && \(code)", completionHandler: nil) }
 
     // STL_SELFTEST=1: run a scripted smoke test in the real web view, print the result and quit.
@@ -257,7 +362,16 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
                 const doc = JSON.parse(stlApp.docFor('Testname')); stlApp.savedAs('Testname');
         await new Promise(r => setTimeout(r, 100));
         const legal = (await (await fetch('legal/THIRD_PARTY_NOTICES.txt')).text()).split('\\n')[0] + ' / ' + (await (await fetch('legal/GPL-2.0.txt')).text()).trim().split('\\n')[0].trim();
-        return JSON.stringify({ legal, counts, afterPaste, piko: lib.split('\\n')[0], docName: doc.name, title: document.title, window: (window.__winTitle || '') });
+        const build = await (await fetch('build.json')).json();
+        stlApp.settings(); await new Promise(r => setTimeout(r, 100));
+        const langOpts = document.querySelectorAll('#setLang option').length, libOpts = document.querySelectorAll('#setLib option').length;
+        document.getElementById('setLang').value = 'de'; document.getElementById('setLang').dispatchEvent(new Event('change'));
+        document.getElementById('setLib').value = 'HO-Piko-A.xtp';
+        await new Promise(r => setTimeout(r, 300));
+        const buildText = document.getElementById('buildInfo').textContent;
+        document.getElementById('dlgSettings').close('ok'); await new Promise(r => setTimeout(r, 100));
+        const de = [document.getElementById('btnSave').textContent, document.querySelector('#emptyHint strong').textContent, document.getElementById('stCounts').textContent, document.querySelector('#dlgHelp li').textContent.slice(0, 30)].join(' | ');
+        return JSON.stringify({ legal, counts, afterPaste, piko: lib.split('\\n')[0], docName: doc.name, title: document.title, build, langOpts, libOpts, buildText, de, settings: localStorage.getItem('stl.settings'), nativeInfo: window.__stlNative });
         """
         let testFile = ProcessInfo.processInfo.environment["STL_SELFTEST_FILE"].map { URL(fileURLWithPath: $0) }
         currentURL = testFile  // pretend this layout was opened from that file, so "Save" writes there
@@ -272,7 +386,14 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
                 let saved = (try? String(contentsOf: testFile, encoding: .utf8)) ?? ""
                 let doc = (try? JSONSerialization.jsonObject(with: Data(saved.utf8))) as? [String: Any]
                 print("SELFTEST SAVE", doc == nil ? "FAIL (nothing written)" : "OK name=\(doc!["name"] ?? "-") parts=\((doc!["parts"] as? [Any])?.count ?? -1) title=\(self.window?.title ?? "-")")
-                fflush(stdout); NSApp.terminate(nil)
+                print("SELFTEST MENUS", NSApp.mainMenu?.items.compactMap { $0.submenu?.title }.joined(separator: ", ") ?? "-", "| lang pref:", Prefs.langPref)
+                // a new layout starts with the default library from the settings
+                webView.evaluateJavaScript("window.__stl.dirty = false; stlApp.newLayout()", completionHandler: nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                    webView.evaluateJavaScript("document.getElementById('libSelect').value + ' / ' + document.getElementById('layoutName').value + ' / ' + document.getElementById('libTitle').textContent") { v, _ in
+                        print("SELFTEST NEW", v ?? "-"); fflush(stdout); NSApp.terminate(nil)
+                    }
+                }
             }
         }
     }
@@ -316,6 +437,28 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
         case "new":
             currentURL = nil; window.representedURL = nil
             return
+        case "settings":
+            if let l = body["lang"] as? String { Prefs.langPref = l; onLanguageChange?() }
+            return
+        case "chooseDataDir":
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
+            panel.allowsMultipleSelection = false
+            panel.message = L("Default data folder"); panel.prompt = L("Choose")
+            let cur = (body["current"] as? String).map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true) }
+            panel.directoryURL = cur ?? Prefs.dataDir
+            panel.beginSheetModal(for: window) { r in
+                guard r == .OK, let url = panel.url else { return }
+                self.webView.callAsyncJavaScript("stlApp.dataDirChosen(p)", arguments: ["p": abbreviate(url)], in: nil, in: .page, completionHandler: nil)
+            }
+            return
+        case "setDataDir":
+            if let p = body["path"] as? String, !p.isEmpty {
+                let url = URL(fileURLWithPath: (p as NSString).expandingTildeInPath, isDirectory: true)
+                Prefs.customDataDir = url.standardizedFileURL == Prefs.documents.standardizedFileURL ? nil : url
+            } else { Prefs.customDataDir = nil }
+            refreshNativeInfo()
+            return
         case "save":
             if let url = currentURL {
                 // keep the layout name typed in the editor; write to the same file
@@ -331,7 +474,7 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
             panel.nameFieldStringValue = name
             panel.canCreateDirectories = true
             panel.isExtensionHidden = false
-            if type != "download", let dir = currentURL?.deletingLastPathComponent() { panel.directoryURL = dir }
+            panel.directoryURL = (type != "download" ? currentURL?.deletingLastPathComponent() : nil) ?? Prefs.dataDir
             panel.beginSheetModal(for: window) { r in
                 guard r == .OK, let url = panel.url else { return }
                 if type == "download" { if let text = body["text"] as? String { self.write(text, to: url) }; return }
@@ -341,7 +484,7 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
             let panel = NSOpenPanel()
             panel.allowedContentTypes = [.json]
             panel.allowsMultipleSelection = false
-            if let dir = currentURL?.deletingLastPathComponent() { panel.directoryURL = dir }
+            panel.directoryURL = currentURL?.deletingLastPathComponent() ?? Prefs.dataDir
             panel.beginSheetModal(for: window) { r in
                 guard r == .OK, let url = panel.url else { return }
                 do {
@@ -349,7 +492,7 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
                     let n = Self.layoutBase(url)
                     self.webView.callAsyncJavaScript("await stlApp.openText(t, n)", arguments: ["t": text, "n": n], in: nil, in: .page) { res in
                         if case .failure(let e) = res {
-                            let a = NSAlert(); a.messageText = "Could not open “\(url.lastPathComponent)”"; a.informativeText = e.localizedDescription
+                            let a = NSAlert(); a.messageText = L("Could not open “%@”", url.lastPathComponent); a.informativeText = e.localizedDescription
                             a.beginSheetModal(for: window)
                         } else { self.currentURL = url; window.representedURL = url }
                     }
@@ -357,6 +500,13 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
             }
         default: return
         }
+    }
+
+    /// keep the injected info current for reloads
+    private func refreshNativeInfo() {
+        let ucc = webView.configuration.userContentController
+        ucc.removeAllUserScripts()
+        ucc.addUserScript(WKUserScript(source: Self.nativeInfoScript(), injectionTime: .atDocumentStart, forMainFrameOnly: true))
     }
 
     @discardableResult
@@ -371,7 +521,7 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
         a.beginSheetModal(for: window!) { _ in completionHandler() }
     }
     func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
-        let a = NSAlert(); a.messageText = message; a.addButton(withTitle: "OK"); a.addButton(withTitle: "Cancel")
+        let a = NSAlert(); a.messageText = message; a.addButton(withTitle: "OK"); a.addButton(withTitle: L("Cancel"))
         a.beginSheetModal(for: window!) { completionHandler($0 == .alertFirstButtonReturn) }
     }
     func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
@@ -392,6 +542,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store = Store()
         buildMenu()
         wc = EditorWindowController(store: store)
+        wc.onLanguageChange = { [weak self] in self?.buildMenu() }
         wc.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -432,60 +583,62 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let host = NSMenuItem(); host.submenu = m; main.addItem(host); return m
         }
         _ = sub(appName, [
-            NSMenuItem(title: "About \(appName)", action: #selector(showAbout(_:)), keyEquivalent: ""),
+            NSMenuItem(title: L("About %@", appName), action: #selector(showAbout(_:)), keyEquivalent: ""),
             .separator(),
-            NSMenuItem(title: "Hide \(appName)", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h"),
-            NSMenuItem(title: "Quit \(appName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"),
+            item(L("Settings…"), "stlApp.settings()", ","),
+            .separator(),
+            NSMenuItem(title: L("Hide %@", appName), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h"),
+            NSMenuItem(title: L("Quit %@", appName), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"),
         ])
-        _ = sub("File", [
-            item("New Layout", "stlApp.newLayout()", "n"),
-            item("Open…", "stlApp.openFile()", "o"),
+        _ = sub(L("File"), [
+            item(L("New Layout"), "stlApp.newLayout()", "n"),
+            item(L("Open…"), "stlApp.openFile()", "o"),
             .separator(),
-            item("Save", "stlApp.save()", "s"),
-            item("Save As…", "stlApp.saveAs()", "s", [.command, .shift]),
+            item(L("Save"), "stlApp.save()", "s"),
+            item(L("Save As…"), "stlApp.saveAs()", "s", [.command, .shift]),
             .separator(),
-            NSMenuItem(title: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"),
+            NSMenuItem(title: L("Close Window"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"),
         ])
-        _ = sub("Edit", [
-            item("Undo", "stlApp.undo()", "z"),
-            item("Redo", "stlApp.redo()", "z", [.command, .shift]),
+        _ = sub(L("Edit"), [
+            item(L("Undo"), "stlApp.undo()", "z"),
+            item(L("Redo"), "stlApp.redo()", "z", [.command, .shift]),
             .separator(),
-            NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"),
-            NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"),
-            NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"),
-            NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"),
-            item("Duplicate", "stlApp.duplicate()", "d"),
+            NSMenuItem(title: L("Cut"), action: #selector(NSText.cut(_:)), keyEquivalent: "x"),
+            NSMenuItem(title: L("Copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c"),
+            NSMenuItem(title: L("Paste"), action: #selector(NSText.paste(_:)), keyEquivalent: "v"),
+            NSMenuItem(title: L("Select All"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"),
+            item(L("Duplicate"), "stlApp.duplicate()", "d"),
         ])
-        _ = sub("Arrange", [
-            item("Rotate Clockwise", "stlApp.rotate()", "r", [.command, .option]),
-            item("Rotate Counter-Clockwise", "stlApp.rotate(-(parseFloat(document.getElementById('rotStep').value)||15))", "r", [.command, .option, .shift]),
-            item("Rotate 90° Clockwise", "stlApp.rotate(90)", ""),
-            item("Rotate 180°", "stlApp.rotate(180)", ""),
+        _ = sub(L("Arrange"), [
+            item(L("Rotate Clockwise"), "stlApp.rotate()", "r", [.command, .option]),
+            item(L("Rotate Counter-Clockwise"), "stlApp.rotate(-(parseFloat(document.getElementById('rotStep').value)||15))", "r", [.command, .option, .shift]),
+            item(L("Rotate 90° Clockwise"), "stlApp.rotate(90)", ""),
+            item(L("Rotate 180°"), "stlApp.rotate(180)", ""),
         ])
-        _ = sub("Tools", [
-            item("Select / Move   V", "stlApp.tool('select')", ""),
+        _ = sub(L("Tools"), [
+            item(L("Select / Move") + "   V", "stlApp.tool('select')", ""),
             .separator(),
-            item("Line   L", "stlApp.tool('line')", ""),
-            item("Polyline / Outline   P", "stlApp.tool('poly')", ""),
-            item("Rectangle   B", "stlApp.tool('rect')", ""),
-            item("Circle   O", "stlApp.tool('circle')", ""),
-            item("Dimension   D", "stlApp.tool('dim')", ""),
-            item("Text   T", "stlApp.tool('text')", ""),
+            item(L("Line") + "   L", "stlApp.tool('line')", ""),
+            item(L("Polyline / Outline") + "   P", "stlApp.tool('poly')", ""),
+            item(L("Rectangle") + "   B", "stlApp.tool('rect')", ""),
+            item(L("Circle") + "   O", "stlApp.tool('circle')", ""),
+            item(L("Dimension") + "   D", "stlApp.tool('dim')", ""),
+            item(L("Text") + "   T", "stlApp.tool('text')", ""),
         ])
-        _ = sub("View", [
-            item("Zoom to Fit", "stlApp.fit()", "0"),
-            item("Toggle Part Labels", "stlApp.toggleLabels()", "l"),
-            item("Parts List", "stlApp.partsList()", "p", [.command, .shift]),
+        _ = sub(L("View"), [
+            item(L("Zoom to Fit"), "stlApp.fit()", "0"),
+            item(L("Toggle Part Labels"), "stlApp.toggleLabels()", "l"),
+            item(L("Parts List"), "stlApp.partsList()", "p", [.command, .shift]),
             .separator(),
-            NSMenuItem(title: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f"),
+            NSMenuItem(title: L("Enter Full Screen"), action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f"),
         ]).items.last?.keyEquivalentModifierMask = [.command, .control]
-        let win = sub("Window", [
-            NSMenuItem(title: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m"),
-            NSMenuItem(title: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: ""),
+        let win = sub(L("Window"), [
+            NSMenuItem(title: L("Minimize"), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m"),
+            NSMenuItem(title: L("Zoom"), action: #selector(NSWindow.performZoom(_:)), keyEquivalent: ""),
         ])
-        let xtc = NSMenuItem(title: "XTrackCAD Libraries on SourceForge", action: #selector(openXTrackCAD(_:)), keyEquivalent: "")
+        let xtc = NSMenuItem(title: L("XTrackCAD Libraries on SourceForge"), action: #selector(openXTrackCAD(_:)), keyEquivalent: "")
         xtc.target = self
-        let help = sub("Help", [item("\(appName) Help", "stlApp.help()", "?"), item("Licenses…", "stlApp.licenses()"), xtc])
+        let help = sub(L("Help"), [item(L("%@ Help", appName), "stlApp.help()", "?"), item(L("Licenses…"), "stlApp.licenses()"), xtc])
         NSApp.mainMenu = main
         NSApp.windowsMenu = win
         NSApp.helpMenu = help

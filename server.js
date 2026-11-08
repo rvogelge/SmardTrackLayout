@@ -14,6 +14,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(ROOT, 'public');
@@ -99,6 +100,21 @@ async function listLayouts() {
   return out.sort((a, b) => b.modified.localeCompare(a.modified));
 }
 
+// ---------- build info (Settings dialog) ----------
+// public/build.json is written by deploy.sh / macos/build.sh; when running from a git checkout without it, ask git.
+let build = null;
+async function buildInfo() {
+  if (build) return build;
+  try { return (build = JSON.parse(await fs.readFile(path.join(PUBLIC, 'build.json'), 'utf8'))); } catch { /* not generated */ }
+  const version = JSON.parse(await fs.readFile(path.join(ROOT, 'package.json'), 'utf8')).version;
+  const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  try {
+    build = { version, commit: git('rev-parse', '--short=7', 'HEAD'), commitFull: git('rev-parse', 'HEAD'),
+      date: git('log', '-1', '--format=%cI', 'HEAD'), dirty: git('status', '--porcelain', '--untracked-files=no') !== '' };
+  } catch { build = { version, commit: null, date: null, dirty: false }; }
+  return build;
+}
+
 // ---------- http ----------
 function send(res, status, body, type = 'application/json') {
   const data = typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body);
@@ -151,6 +167,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (req.method === 'DELETE') { await fs.rm(file, { force: true }); return send(res, 200, { ok: true }); }
     }
+    if (p === '/build.json') return send(res, 200, await buildInfo());
     if (p.startsWith('/api/')) return send(res, 404, { error: 'not found' });
     return serveStatic(req, res, p);
   } catch (e) {

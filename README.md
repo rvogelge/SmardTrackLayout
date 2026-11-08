@@ -9,6 +9,7 @@ A browser-based model railway track layout editor built on the
 - It also has rotate, delete, undo/redo, box select, double-click to select a connected group, zoom/pan, part number labels and a parts list (CSV).
 - **Save as…** writes the layout (track and drawings) to a JSON file, **Open…** loads one. Your current work is autosaved in the browser.
 - Drawing tools for baseboard outlines: line, polyline, rectangle, circle, text and dimensions. Dimensions can be linked to edges. Rectangles have edge handles to change only the width or height, and a Properties panel takes exact values from the keyboard.
+- **Settings** (⚙, ⌘, in the Mac app): user interface language (English, Deutsch, Français, Italiano, Español, or the system language), the default track library for new layouts, the default data folder for Open/Save (Documents unless changed; in browsers this needs Chrome/Edge), and the version, commit and commit date of the running build.
 
 ## Run locally
 
@@ -33,7 +34,7 @@ The app runs at `http://docker.host:8080/`. Saved layouts and cached library fil
 ```
 
 The macOS app is a native Swift/WebKit shell around the same editor. It doesn't need a server or Node: a `WKURLSchemeHandler` answers the editor's `/api` calls inside the app.
-- File ▸ Save As… (⌘S) and Open… (⌘O) use the normal macOS file dialogs. Your current work is autosaved between sessions.
+- File ▸ Save (⌘S), Save As… (⇧⌘S) and Open… (⌘O) use the normal macOS file dialogs, starting in the data folder from Settings (default: Documents). The menus follow the language chosen in Settings. Your current work is autosaved between sessions.
 - Library files are fetched from SourceForge and cached next to the layouts. The Märklin C-track files work offline.
 - The usual shortcuts work: ⌘N/O/S, ⌘Z/⇧⌘Z, ⌘0 fit, ⌘L labels.
 - `STL_SELFTEST=1 dist/SmardTrackLayout.app/Contents/MacOS/SmardTrackLayout` runs a scripted smoke test and prints the result.
@@ -44,7 +45,8 @@ The app is ad-hoc signed. On another Mac, Gatekeeper blocks it the first time; r
 
 - `server.js` serves the UI and proxies library files from SourceForge (`/api/library?file=…`), caching them in `/data/cache`. The library list is refreshed weekly. The two Märklin C-track libraries ship in `seed/`, so they work offline.
 - `public/xtp.js` parses `.xtp` files. It reads endpoints (`E`), straight/curved/bezier track (`S`, `C`, `W`) and outline drawing (`L`, `A`, `F`, `G`, plus the `*3` variants). Units are inches and angles are compass degrees.
-- `public/editor.js` is the SVG editor: placement, snapping, connection detection and persistence.
+- `public/editor.js` is the SVG editor: placement, snapping, connection detection and persistence. `public/i18n.js` holds the UI texts in all five languages.
+- `scripts/build-info.sh` writes `build.json` (version, commit, commit date) for the Settings dialog; `deploy.sh` and `macos/build.sh` run it. A local `node server.js` reads the same data from git.
 
 ## License
 

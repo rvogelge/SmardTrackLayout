@@ -55,6 +55,7 @@ body {
 }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 14px; margin-right: 6px; }
 .brand img { width: 22px; height: 22px; }
+.toolbar.compact .brand span { display: none; } /* long translations: drop the name before wrapping */
 .tgroup { display: flex; align-items: center; gap: 4px; }
 button, select, input[type=search], input.name {
   font: inherit; color: var(--text); background: var(--btn); border: 1px solid var(--border);
@@ -277,3 +278,14 @@ dialog.wide { width: min(760px, calc(100vw - 32px)); }
 .licensetext { margin: 0; max-height: 58vh; overflow: auto; white-space: pre-wrap; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
   background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
 dialog a { color: var(--accent); }
+
+/* settings */
+button.icon { padding: 4px 7px; display: inline-flex; align-items: center; }
+button.icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linejoin: round; }
+form.settings { display: flex; flex-direction: column; gap: 14px; width: min(520px, calc(100vw - 64px)); }
+.dirrow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.dirrow code { flex: 1 1 200px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 6px 8px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.buildinfo { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0; }
+.buildinfo dt { color: var(--muted); }
+.buildinfo dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }

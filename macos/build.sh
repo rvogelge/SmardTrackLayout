@@ -29,6 +29,7 @@ lipo -create "$BUILD/$NAME-arm64" "$BUILD/$NAME-x86_64" -output "$APP/Contents/M
 
 echo "› resources"
 cp -R public "$APP/Contents/Resources/web"
+scripts/build-info.sh "$APP/Contents/Resources/web/build.json"
 cp -R seed "$APP/Contents/Resources/seed"
 swift macos/make-icon.swift public/favicon.svg "$BUILD/AppIcon.iconset"
 iconutil -c icns "$BUILD/AppIcon.iconset" -o "$APP/Contents/Resources/AppIcon.icns"
@@ -48,6 +49,9 @@ cat > "$APP/Contents/Info.plist" <<EOF
   <key>LSMinimumSystemVersion</key><string>$MIN_OS</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.graphics-design</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleAllowMixedLocalizations</key><true/>
+  <key>CFBundleLocalizations</key><array><string>en</string><string>de</string><string>fr</string><string>it</string><string>es</string></array>
   <key>NSHumanReadableCopyright</key><string>© 2026 Rolf Vogelgesang · GNU GPL v3 or later. Track geometry: XTrackCAD (GPL v2+).</string>
 </dict></plist>
 EOF

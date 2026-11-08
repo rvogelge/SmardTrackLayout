@@ -9,6 +9,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { parseXtp, partPaths } from './xtp.js';
+import { t as tr, setLang, applyI18n, LANGS, systemLang, currentLang } from './i18n.js';
 
 const $ = (s) => document.querySelector(s);
 const NS = 'http://www.w3.org/2000/svg';
@@ -127,13 +128,13 @@ async function loadLib(file) {
 
 const libGroup = (name) => { const m = name.match(/^([A-Za-z0-9]+)-/); return m ? m[1] : 'Other'; };
 
-function fillLibSelect() {
-  const sel = $('#libSelect'); sel.innerHTML = '';
+function fillLibSelect(sel = $('#libSelect')) {
+  sel.innerHTML = '';
   const groups = new Map();
   for (const f of S.libList) { const g = libGroup(f); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(f); }
   const order = [...groups.keys()].sort((a, b) => (a === 'Other') - (b === 'Other') || a.localeCompare(b));
   for (const g of order) {
-    const og = document.createElement('optgroup'); og.label = g === 'Other' ? 'Other / unprefixed' : g;
+    const og = document.createElement('optgroup'); og.label = g === 'Other' ? tr('lib.other') : g;
     for (const f of groups.get(g)) { const o = document.createElement('option'); o.value = f; o.textContent = f.replace(/\.xtp$/i, ''); og.append(o); }
     sel.append(og);
   }
@@ -141,16 +142,16 @@ function fillLibSelect() {
 
 async function selectLib(file) {
   $('#libSelect').value = file;
-  $('#palette').innerHTML = '<div class="muted pad">Loading ' + esc(file) + ' from SourceForge…</div>';
+  $('#palette').innerHTML = '<div class="muted pad">' + esc(tr('lib.loadingFrom', { f: file })) + '</div>';
   $('#libTitle').textContent = '';
   try {
     const lib = await loadLib(file);
     S.lib = file;
     try { localStorage.setItem('stl.lib', file); } catch { /* ignore */ }
-    $('#libTitle').textContent = lib.contents ? `${lib.contents} · ${lib.parts.length} parts` : `${lib.parts.length} parts`;
+    $('#libTitle').textContent = (lib.contents ? lib.contents + ' · ' : '') + tr('lib.parts', { n: lib.parts.length });
     renderPalette();
   } catch (e) {
-    $('#palette').innerHTML = `<div class="muted pad">Could not load ${esc(file)}: ${esc(e.message)}</div>`;
+    $('#palette').innerHTML = `<div class="muted pad">${esc(tr('lib.failed', { f: file, e: e.message }))}</div>`;
   }
 }
 
@@ -174,7 +175,7 @@ function renderPalette() {
     if (!groups.has(d.group)) groups.set(d.group, []);
     groups.get(d.group).push(d);
   }
-  if (!groups.size) { pal.innerHTML = '<div class="muted pad">No matching parts.</div>'; return; }
+  if (!groups.size) { pal.innerHTML = `<div class="muted pad">${esc(tr('lib.noMatch'))}</div>`; return; }
   for (const [g, list] of groups) {
     const det = document.createElement('details'); det.open = true;
     const sum = document.createElement('summary');
@@ -182,7 +183,7 @@ function renderPalette() {
     const grid = document.createElement('div'); grid.className = 'pgrid';
     for (const d of list) {
       const b = document.createElement('button');
-      b.className = 'pitem'; b.title = `${d.desc}${d.partno ? ' — ' + d.partno : ''}\nClick to place, or drag onto the canvas`;
+      b.className = 'pitem'; b.title = `${d.desc}${d.partno ? ' — ' + d.partno : ''}\n${tr('part.tip')}`;
       b.draggable = true;
       b.append(thumb(d));
       b.insertAdjacentHTML('beforeend', `<span class="pd">${esc(d.desc)}</span><span class="pn">${esc(d.partno || '')}</span>`);
@@ -234,7 +235,7 @@ function applyView() {
   const m = minor >= 7 ? minor : major;
   svg.style.backgroundSize = `${major}px ${major}px, ${major}px ${major}px, ${m}px ${m}px, ${m}px ${m}px`;
   svg.style.backgroundPosition = `${tx}px ${ty}px`;
-  $('#stZoom').textContent = `zoom ${Math.round((z / 12) * 100)}%`;
+  $('#stZoom').textContent = tr('zoom', { p: Math.round((z / 12) * 100) });
   if (z !== lastZ) { lastZ = z; renderShapes(); }
   renderOverlay(); renderUI();
 }
@@ -360,7 +361,7 @@ function renderUI() {
   const rot = el('g', { class: 'rothandle', 'data-handle': 'rot' });
   rot.append(el('line', { x1: hx, y1: sy0 - 6, x2: hx, y2: hy + 8 }), el('circle', { cx: hx, cy: hy, r: 8 }),
     el('path', { d: `M${hx - 4} ${hy - 1}a4 4 0 1 1 1.5 3.2`, class: 'roticon' }));
-  const tt = el('title'); tt.textContent = 'Drag to rotate (Shift: free, otherwise in rotation steps)'; rot.append(tt);
+  const tt = el('title'); tt.textContent = tr('rot.handle'); rot.append(tt);
   ui.append(rot);
   if (items.length === 1 && items[0].pts && items[0].type !== 'text') {
     const s = items[0];
@@ -385,36 +386,36 @@ function renderUI() {
 
 function updateStatus() {
   const open = S.allEnds.filter((e) => !S.conn.has(endKey(e.pid, e.i))).length;
-  $('#stCounts').textContent = `${S.parts.length} pieces · ${open} open ends${S.shapes.length ? ` · ${S.shapes.length} drawings` : ''}${S.sel.size ? ` · ${S.sel.size} selected` : ''}`;
+  $('#stCounts').textContent = tr('counts', { n: S.parts.length, o: open }) + (S.shapes.length ? tr('counts.drawings', { n: S.shapes.length }) : '') + (S.sel.size ? tr('counts.sel', { n: S.sel.size }) : '');
   $('#emptyHint').hidden = S.parts.length + S.shapes.length > 0 || S.tool !== 'select';
   $('#btnUndo').disabled = !S.undo.length; $('#btnRedo').disabled = !S.redo.length;
   const one = S.sel.size === 1 && S.lastPlace && S.sel.has(S.lastPlace.pid);
   $('#btnFlip').disabled = !one;
   $('#btnDelete').disabled = $('#btnRotL').disabled = $('#btnRotR').disabled = !S.sel.size;
   let hint = '';
-  if (S.tool !== 'select') hint = TOOL_HINTS[S.tool] + (S.typed ? `  ·  typed: ${S.typed}` : '');
+  if (S.tool !== 'select') hint = tr('th.' + S.tool) + (S.typed ? '  ·  ' + tr('hint.typed', { t: S.typed }) : '');
   else if (S.sel.size === 1) {
     const it = itemById([...S.sel][0]);
     if (it?.pts) hint = shapeInfo(it);
     else { const d = it && def(it); if (d) hint = `${d.desc}${d.partno ? ' · ' + d.partno : ''} · ${d.mfr} · ${f3(it.rot)}°`; }
-  } else if (!S.active && S.parts.length) hint = 'Click an orange open end to choose where the next piece attaches.';
+  } else if (!S.active && S.parts.length) hint = tr('hint.pickEnd');
   $('#stHint').textContent = hint;
-  document.title = `${S.dirty ? '• ' : ''}${$('#layoutName').value || 'Untitled'} — SmardTrackLayout`;
+  document.title = `${S.dirty ? '• ' : ''}${$('#layoutName').value || tr('untitled')} — SmardTrackLayout`;
   renderProps();
   scheduleAutosave();
 }
 
 function shapeInfo(s) {
   const len = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
-  if (s.type === 'line') return `Line · ${mm(len(...s.pts))} mm`;
-  if (s.type === 'dim') return `Dimension · ${mm(len(...s.pts))} mm`;
-  if (s.type === 'circle') return `Circle · r ${mm(len(...s.pts))} mm`;
-  if (s.type === 'text') return `Text “${s.text}” · ${mm(s.size)} mm`;
-  if (isRect(s)) { const [w, h] = rectSize(s); return `Rectangle · ${mm(w)} × ${mm(h)} mm · drag the edge bars to change width or height`; }
+  if (s.type === 'line') return tr('info.line', { l: mm(len(...s.pts)) });
+  if (s.type === 'dim') return tr('info.dim', { l: mm(len(...s.pts)) });
+  if (s.type === 'circle') return tr('info.circle', { r: mm(len(...s.pts)) });
+  if (s.type === 'text') return tr('info.text', { t: s.text, s: mm(s.size) });
+  if (isRect(s)) { const [w, h] = rectSize(s); return tr('info.rect', { w: mm(w), h: mm(h) }); }
   const b = shapeBBox(s);
   let per = 0; for (let i = 1; i < s.pts.length; i++) per += len(s.pts[i - 1], s.pts[i]);
   if (s.closed) per += len(s.pts.at(-1), s.pts[0]);
-  return `${s.closed ? 'Outline' : 'Polyline'} · ${s.pts.length} points · ${mm(b.x1 - b.x0)} × ${mm(b.y1 - b.y0)} mm · perimeter ${mm(per)} mm`;
+  return tr('info.poly', { kind: tr(s.closed ? 'shape.outline' : 'shape.poly'), n: s.pts.length, w: mm(b.x1 - b.x0), h: mm(b.y1 - b.y0), p: mm(per) });
 }
 
 const refresh = () => { computeConnections(); renderSelection(); renderOverlay(); renderUI(); updateStatus(); };
@@ -537,15 +538,6 @@ function applySnap(movingIds, snap) {
 }
 
 // ---------------------------------------------------------------- drawing tools
-const TOOL_HINTS = {
-  line: 'Line: click start and end. Type a length in mm + Enter. Shift: 15° steps. Esc: done.',
-  poly: 'Polyline: click points; click the first point to close, Enter / double-click / right-click to finish. Type a length + Enter.',
-  rect: 'Rectangle: click two corners, or click one corner and type e.g. 2400x1200 + Enter.',
-  circle: 'Circle: click the centre, then the radius (or type the radius in mm + Enter).',
-  dim: 'Dimension: click two points, then where the dimension line goes. Snaps to corners and track ends.',
-  text: 'Text: click where the text goes.',
-};
-
 function setTool(t) {
   if (S.tool === t && t !== 'select') t = 'select';
   S.tool = t; S.draft = null; S.typed = '';
@@ -715,7 +707,7 @@ function applyTyped() {
   const D = S.draft; if (!D || !raw) return false;
   const last = D.pts.at(-1), cur = D.cur || last;
   if (D.type === 'rect') {
-    const m = raw.match(/^([\d.]+)\s*[x*×]\s*([\d.]+)$/); if (!m) { toast('Type width x height in mm, e.g. 2400x1200'); return true; }
+    const m = raw.match(/^([\d.]+)\s*[x*×]\s*([\d.]+)$/); if (!m) { toast(tr('typedRect')); return true; }
     const sx = Math.sign(cur[0] - last[0]) || 1, sy = Math.sign(cur[1] - last[1]) || 1;
     commitPoint({ x: last[0] + sx * m[1] / MM, y: last[1] + sy * m[2] / MM }); return true;
   }
@@ -815,31 +807,31 @@ function propFields(s) {
   if (isRect(s)) {
     const [w, h] = rectSize(s);
     const straight = Math.abs(s.pts[1][1] - s.pts[0][1]) < 1e-6;
-    num('w', straight ? 'Size X' : 'Width', mm(w), 'mm', (v) => setRectSize(s, 0, v / MM), 1);
-    num('h', straight ? 'Size Y' : 'Height', mm(h), 'mm', (v) => setRectSize(s, 1, v / MM), 1);
-    num('a', 'Angle', r2(segAng(s.pts[0], s.pts[1])), '°', (v) => rotateShapeTo(s, segAng(s.pts[0], s.pts[1]), v));
+    num('w', tr(straight ? 'p.sizeX' : 'p.width'), mm(w), 'mm', (v) => setRectSize(s, 0, v / MM), 1);
+    num('h', tr(straight ? 'p.sizeY' : 'p.height'), mm(h), 'mm', (v) => setRectSize(s, 1, v / MM), 1);
+    num('a', tr('p.angle'), r2(segAng(s.pts[0], s.pts[1])), '°', (v) => rotateShapeTo(s, segAng(s.pts[0], s.pts[1]), v));
     xy();
   } else if (s.type === 'line') {
-    num('l', 'Length', mm(segLen(...s.pts)), 'mm', (v) => setSegLen(s.pts, 0, 1, v / MM), 1);
-    num('a', 'Angle', r2(segAng(...s.pts)), '°', (v) => { const L = segLen(...s.pts); s.pts[1] = [s.pts[0][0] + Math.cos(rad(v)) * L, s.pts[0][1] + Math.sin(rad(v)) * L]; });
-    xy('X start', 'Y start');
+    num('l', tr('p.length'), mm(segLen(...s.pts)), 'mm', (v) => setSegLen(s.pts, 0, 1, v / MM), 1);
+    num('a', tr('p.angle'), r2(segAng(...s.pts)), '°', (v) => { const L = segLen(...s.pts); s.pts[1] = [s.pts[0][0] + Math.cos(rad(v)) * L, s.pts[0][1] + Math.sin(rad(v)) * L]; });
+    xy(tr('p.xStart'), tr('p.yStart'));
   } else if (s.type === 'circle') {
-    num('r', 'Radius', mm(segLen(...s.pts)), 'mm', (v) => setSegLen(s.pts, 0, 1, v / MM), 1);
-    num('d', 'Diameter', mm(2 * segLen(...s.pts)), 'mm', (v) => setSegLen(s.pts, 0, 1, v / MM / 2), 1);
-    xy('X centre', 'Y centre');
+    num('r', tr('p.radius'), mm(segLen(...s.pts)), 'mm', (v) => setSegLen(s.pts, 0, 1, v / MM), 1);
+    num('d', tr('p.diameter'), mm(2 * segLen(...s.pts)), 'mm', (v) => setSegLen(s.pts, 0, 1, v / MM / 2), 1);
+    xy(tr('p.xCentre'), tr('p.yCentre'));
   } else if (s.type === 'dim') {
-    num('l', 'Length', mm(segLen(...s.pts)), 'mm', (v) => setDimLength(s, v / MM), 1);
-    num('o', 'Offset', mm(Math.abs(s.off || 0)), 'mm', (v) => { s.off = (Math.sign(s.off || -1)) * v / MM; }, 0);
+    num('l', tr('p.length'), mm(segLen(...s.pts)), 'mm', (v) => setDimLength(s, v / MM), 1);
+    num('o', tr('p.offset'), mm(Math.abs(s.off || 0)), 'mm', (v) => { s.off = (Math.sign(s.off || -1)) * v / MM; }, 0);
   } else if (s.type === 'text') {
-    F.push({ key: 't', label: 'Text', val: s.text, text: true, set: (v) => { if (String(v).trim()) s.text = String(v).trim(); } });
-    num('s', 'Height', mm(s.size), 'mm', (v) => { s.size = v / MM; }, 1);
-    num('a', 'Angle', r2(s.angle || 0), '°', (v) => { s.angle = norm(v); });
+    F.push({ key: 't', label: tr('p.text'), val: s.text, text: true, set: (v) => { if (String(v).trim()) s.text = String(v).trim(); } });
+    num('s', tr('p.height'), mm(s.size), 'mm', (v) => { s.size = v / MM; }, 1);
+    num('a', tr('p.angle'), r2(s.angle || 0), '°', (v) => { s.angle = norm(v); });
     xy();
   } else if (s.type === 'poly') {
     const n = s.pts.length, edges = s.closed ? n : n - 1;
     for (let i = 0; i < Math.min(edges, 16); i++) {
       const j = (i + 1) % n;
-      num('s' + i, `Side ${i + 1}`, mm(segLen(s.pts[i], s.pts[j])), 'mm', (v) => {
+      num('s' + i, tr('p.side', { n: i + 1 }), mm(segLen(s.pts[i], s.pts[j])), 'mm', (v) => {
         const before = [...s.pts[j]]; setSegLen(s.pts, i, j, v / MM);
         if (!s.closed) for (let k = j + 1; k < n; k++) s.pts[k] = [s.pts[k][0] + s.pts[j][0] - before[0], s.pts[k][1] + s.pts[j][1] - before[1]];
       }, 1);
@@ -849,7 +841,6 @@ function propFields(s) {
   return F;
 }
 
-const PROP_TITLES = { line: 'Line', circle: 'Circle', dim: 'Dimension', text: 'Text', poly: 'Polyline' };
 // the rectangle the size panel works on: a single marked rectangle, also when its own dimensions are marked with it
 function panelRect() {
   if (S.tool !== 'select' || !S.sel.size) return null;
@@ -866,10 +857,10 @@ function renderProps() {
   const key = s.id + ':' + fields.map((f) => f.key).join(',');
   if (key !== propsKey) {
     propsKey = key;
-    const title = isRect(s) ? 'Rectangle' : s.type === 'poly' && s.closed ? 'Outline' : s.type === 'dim' && s.ref ? 'Dimension (linked)' : PROP_TITLES[s.type];
+    const title = tr(isRect(s) ? 'shape.rect' : s.type === 'poly' && s.closed ? 'shape.outline' : s.type === 'dim' && s.ref ? 'shape.dimLinked' : 'shape.' + s.type);
     propsEl.innerHTML = `<div class="ptitle">${title}</div>` + fields.map((f) =>
       `<label><span>${f.label}</span><input data-k="${f.key}" ${f.text ? 'class="ptext"' : 'inputmode="decimal"'} spellcheck="false" autocomplete="off"><em>${f.unit || ''}</em></label>`).join('') +
-      `<div class="phint">${s.type === 'dim' && s.ref ? 'Changing the length resizes the measured shape. ' : ''}Enter applies · Tab next</div>`;
+      `<div class="phint">${s.type === 'dim' && s.ref ? tr('p.dimHint') : ''}${tr('p.hint')}</div>`;
     for (const inp of propsEl.querySelectorAll('input')) inp.addEventListener('change', () => applyProp(inp.dataset.k, inp.value));
   }
   for (const f of fields) { const inp = propsEl.querySelector(`input[data-k="${f.key}"]`); if (inp && inp !== document.activeElement) inp.value = f.val; }
@@ -1009,7 +1000,7 @@ function restoreItems(orig) {
 
 svg.addEventListener('pointermove', (ev) => {
   const [wx, wy] = toWorldPt(ev.clientX, ev.clientY);
-  $('#stCoords').textContent = `x ${mm(wx)} mm · y ${mm(wy)} mm`;
+  $('#stCoords').textContent = tr('coords', { x: mm(wx), y: mm(wy) });
   S.mouse = { sx: ev.clientX, sy: ev.clientY, wx, wy, inside: true };
   const D = S.drag;
   if (!D) {
@@ -1188,10 +1179,10 @@ function copySelection({ quiet = false } = {}) {
   S.clip = text;
   try { localStorage.setItem('stl.clip', text); } catch { /* ignore */ }
   pasteCount = 0; copyMouse = S.mouse ? { ...S.mouse } : null;
-  if (!quiet) toast(`Copied ${data.parts.length + data.shapes.length} item(s)`);
+  if (!quiet) toast(tr('copied', { n: data.parts.length + data.shapes.length }));
   return true;
 }
-function cutSelection() { if (copySelection({ quiet: true })) { const n = S.sel.size; deleteSelection(); toast(`Cut ${n} item(s)`); return true; } return false; }
+function cutSelection() { if (copySelection({ quiet: true })) { const n = S.sel.size; deleteSelection(); toast(tr('cut', { n })); return true; } return false; }
 function readClip() {
   let text = null;
   try { text = localStorage.getItem('stl.clip'); } catch { /* ignore */ }
@@ -1241,6 +1232,7 @@ document.addEventListener('paste', (ev) => {
 // ---------------------------------------------------------------- keyboard
 const TOOL_KEYS = { v: 'select', l: 'line', p: 'poly', b: 'rect', o: 'circle', d: 'dim', t: 'text' };
 document.addEventListener('keydown', (ev) => {
+  if (!(ev.target instanceof Element)) Object.defineProperty(ev, 'target', { value: document.body });
   if (ev.target.closest('#props') && ev.key === 'Escape') { ev.target.blur(); return; }
   // in the properties panel, Ctrl+Z / Ctrl+Y undo the applied value rather than editing the text field
   const propsUndo = ev.target.closest('#props') && (ev.ctrlKey || ev.metaKey) && 'zy'.includes(ev.key.toLowerCase());
@@ -1255,6 +1247,7 @@ document.addEventListener('keydown', (ev) => {
   if (mod && k === 'y') { ev.preventDefault(); redo(); return; }
   if (mod && k === 's') { ev.preventDefault(); ev.shiftKey ? saveAs() : save(); return; }
   if (mod && k === 'o') { ev.preventDefault(); openFile(); return; }
+  if (mod && k === ',') { ev.preventDefault(); openSettings(); return; }
   if (!mod && k === 'enter' && S.tool === 'select') {
     const f = $('#props:not([hidden]) input'); if (f) { ev.preventDefault(); f.focus(); f.select(); return; }
   }
@@ -1295,7 +1288,7 @@ const step = () => { const v = parseFloat(String($('#rotStep').value).replace(',
 
 // ---------------------------------------------------------------- persistence
 const native = window.webkit?.messageHandlers?.stl; // running inside the macOS app?
-const layoutName = () => $('#layoutName').value.trim() || 'Untitled';
+const layoutName = () => $('#layoutName').value.trim() || tr('untitled');
 
 function layoutDoc() {
   const r = (v) => +v.toFixed(5);
@@ -1325,12 +1318,12 @@ async function loadDoc(doc, { keepView = false } = {}) {
   normalizeRects();
   for (const d of S.shapes) if (d.type === 'dim' && !d.ref) { const ref = findEdgeRef(...d.pts); if (ref) d.ref = ref; } // older files
   S.sel.clear(); S.active = null; S.lastPlace = null; S.undo = []; S.redo = [];
-  $('#layoutName').value = doc.name || 'Untitled';
+  $('#layoutName').value = doc.name || tr('untitled');
   setTool('select');
   renderAll();
   if (!keepView) fitView();
   const missing = S.parts.filter((p) => !def(p)).length;
-  if (failed.length || missing) toast(`${missing} piece(s) could not be resolved${failed.length ? ' (library unavailable: ' + failed.join(', ') + ')' : ''}`, 5000);
+  if (failed.length || missing) toast(tr('load.missing', { n: missing }) + (failed.length ? tr('load.libUnavail', { l: failed.join(', ') }) : ''), 5000);
 }
 
 let autosaveTimer;
@@ -1349,7 +1342,7 @@ let fileHandle = null;   // browser: handle of the current file (when supported)
 let hasFile = false;     // a current file exists (browser handle or file known to the macOS app)
 
 function docFor(name) { $('#layoutName').value = name; return JSON.stringify(layoutDoc(), null, 1); }
-function savedAs(name) { $('#layoutName').value = name; hasFile = true; S.dirty = false; updateStatus(); toast(`Saved “${name}”`); }
+function savedAs(name) { $('#layoutName').value = name; hasFile = true; S.dirty = false; updateStatus(); toast(tr('saved', { n: name })); }
 async function openText(text, name) { // used by the macOS app after its open panel
   await loadDoc(JSON.parse(text)); $('#layoutName').value = name; hasFile = true; S.dirty = false; updateStatus();
 }
@@ -1361,7 +1354,7 @@ async function save() {
     const w = await fileHandle.createWritable();
     await w.write(docFor(layoutName())); await w.close();
     savedAs(layoutName());
-  } catch (e) { if (e.name !== 'AbortError') toast('Save failed: ' + e.message, 5000); }
+  } catch (e) { if (e.name !== 'AbortError') toast(tr('saveFailed', { e: e.message }), 5000); }
 }
 
 async function saveAs() {
@@ -1369,16 +1362,16 @@ async function saveAs() {
   if (native) { native.postMessage({ type: 'saveAs', name: name + '.stl.json' }); return; } // app shows the save panel, then calls docFor/savedAs
   if (window.showSaveFilePicker) {
     try {
-      const h = await window.showSaveFilePicker({ suggestedName: name + '.stl.json', types: FILE_TYPES });
+      const h = await window.showSaveFilePicker({ suggestedName: name + '.stl.json', types: FILE_TYPES, startIn: startIn() });
       const n = baseName(h.name), w = await h.createWritable();
       await w.write(docFor(n)); await w.close();
       fileHandle = h; savedAs(n);
-    } catch (e) { if (e.name !== 'AbortError') toast('Save failed: ' + e.message, 5000); }
+    } catch (e) { if (e.name !== 'AbortError') toast(tr('saveFailed', { e: e.message }), 5000); }
     return;
   }
   // browsers without a save dialog API: ask for the name, then download
   const dlg = $('#dlgName'), input = $('#saveName');
-  input.value = name === 'Untitled' ? '' : name;
+  input.value = name === tr('untitled') ? '' : name;
   dlg.showModal(); input.focus(); input.select();
   dlg.onclose = () => {
     dlg.onclose = null;
@@ -1390,16 +1383,16 @@ async function saveAs() {
 }
 
 async function openFile() {
-  if (S.dirty && S.parts.length + S.shapes.length && !confirm('Discard unsaved changes to the current layout?')) return;
+  if (S.dirty && S.parts.length + S.shapes.length && !confirm(tr('confirmDiscard'))) return;
   if (native) { native.postMessage({ type: 'open' }); return; }
   if (window.showOpenFilePicker) {
     try {
-      const [h] = await window.showOpenFilePicker({ types: FILE_TYPES });
+      const [h] = await window.showOpenFilePicker({ types: FILE_TYPES, startIn: startIn() });
       const f = await h.getFile();
       await loadDoc(JSON.parse(await f.text()));
       fileHandle = h; hasFile = true;
       $('#layoutName').value = baseName(f.name); S.dirty = false; updateStatus();
-    } catch (e) { if (e.name !== 'AbortError') toast('Open failed: ' + e.message, 5000); }
+    } catch (e) { if (e.name !== 'AbortError') toast(tr('openFailed', { e: e.message }), 5000); }
     return;
   }
   $('#fileImport').click();
@@ -1425,16 +1418,128 @@ function bomRows() {
 function showBom() {
   const rows = bomRows();
   $('#bomBody').innerHTML = rows.length
-    ? `<table class="bom"><thead><tr><th>Part no.</th><th>Description</th><th class="n">Qty</th></tr></thead><tbody>${rows.map((r) => `<tr><td>${esc(r.partno)}</td><td>${esc(r.desc)}</td><td class="n">${r.n}</td></tr>`).join('')}</tbody><tfoot><tr><th></th><th>Total</th><th class="n">${S.parts.length}</th></tr></tfoot></table>`
-    : '<div class="muted">The layout has no track pieces.</div>';
+    ? `<table class="bom"><thead><tr><th>${tr('bom.pn')}</th><th>${tr('bom.desc')}</th><th class="n">${tr('bom.qty')}</th></tr></thead><tbody>${rows.map((r) => `<tr><td>${esc(r.partno)}</td><td>${esc(r.desc)}</td><td class="n">${r.n}</td></tr>`).join('')}</tbody><tfoot><tr><th></th><th>${tr('bom.total')}</th><th class="n">${S.parts.length}</th></tr></tfoot></table>`
+    : `<div class="muted">${tr('bom.empty')}</div>`;
   $('#dlgBom').showModal();
 }
 
 function newLayout() {
-  if (S.dirty && S.parts.length + S.shapes.length && !confirm('Start a new layout? Unsaved changes in the current one are lost.')) return;
+  if (S.dirty && S.parts.length + S.shapes.length && !confirm(tr('confirmNew'))) return;
   fileHandle = null; hasFile = false; native?.postMessage({ type: 'new' });
-  loadDoc({ name: 'Untitled', parts: [], shapes: [] }).then(() => { S.dirty = false; updateStatus(); });
+  if (settings.defaultLib !== S.lib && S.libList.includes(settings.defaultLib)) selectLib(settings.defaultLib);
+  loadDoc({ name: tr('untitled'), parts: [], shapes: [] }).then(() => { S.dirty = false; updateStatus(); });
 }
+
+
+// ---------------------------------------------------------------- settings
+// Language and default library are kept per browser (localStorage). The data folder is a directory
+// handle in IndexedDB (Chrome/Edge), or, in the macOS app, a path the app keeps in its own defaults.
+const SETTINGS_KEY = 'stl.settings';
+const settings = { lang: 'auto', defaultLib: DEFAULT_LIBS[0] };
+try { Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch { /* ignore */ }
+const nativeInfo = window.__stlNative || {};   // from the macOS app: { dataDir: custom path or null, documents }
+const canPickDir = !native && !!window.showDirectoryPicker;
+let dataDir = null;                           // browser: FileSystemDirectoryHandle, null = Documents
+const startIn = () => fileHandle || dataDir || 'documents';
+
+function idb(mode, fn) {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open('smardtracklayout', 1);
+    open.onupgradeneeded = () => open.result.createObjectStore('kv');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const tx = open.result.transaction('kv', mode), req = fn(tx.objectStore('kv'));
+      tx.oncomplete = () => { open.result.close(); resolve(req.result); };
+      tx.onerror = () => { open.result.close(); reject(tx.error); };
+    };
+  });
+}
+const loadDirHandle = () => idb('readonly', (st) => st.get('dataDir')).catch(() => null);
+const storeDirHandle = (h) => idb('readwrite', (st) => (h ? st.put(h, 'dataDir') : st.delete('dataDir'))).catch(() => {});
+
+function applyLanguage({ full = true } = {}) {
+  const wasUntitled = $('#layoutName').value.trim() === tr('untitled') || $('#layoutName').value === 'Untitled';
+  setLang(settings.lang);
+  applyI18n();
+  if (wasUntitled) $('#layoutName').value = tr('untitled');
+  fitToolbar();
+  if (!full) return;
+  if (S.libList.length) { const v = $('#libSelect').value; fillLibSelect(); $('#libSelect').value = v; }
+  const lib = S.libs.get(S.lib);
+  if (lib) $('#libTitle').textContent = (lib.contents ? lib.contents + ' · ' : '') + tr('lib.parts', { n: lib.parts.length });
+  renderPalette(); propsKey = ''; applyView(); updateStatus();
+}
+// drop the product name in the toolbar when the buttons would otherwise wrap onto a second row
+function fitToolbar() {
+  const tb = $('.toolbar'); tb.classList.remove('compact');
+  const tops = [...tb.children].map((c) => c.getBoundingClientRect().top);
+  if (Math.max(...tops) - Math.min(...tops) > 20) tb.classList.add('compact');
+}
+window.addEventListener('resize', fitToolbar);
+
+let pendingDir;  // in the dialog: undefined = unchanged, null = back to Documents, else the new folder
+function showDir() {
+  const cur = pendingDir !== undefined ? pendingDir : native ? nativeInfo.dataDir : dataDir;
+  const label = native ? (cur || nativeInfo.documents || '~/Documents') : cur ? cur.name : tr('set.dir.docs');
+  const p = $('#setDirPath'); p.textContent = label; p.title = label;
+  const can = !!native || canPickDir;
+  $('#setDirChoose').disabled = !can;
+  $('#setDirReset').disabled = !can || !cur;
+  $('#setDirNote').textContent = tr(can ? 'set.dir.note' : 'set.dir.noFs');
+}
+async function chooseDir() {
+  if (native) { native.postMessage({ type: 'chooseDataDir', current: pendingDir ?? nativeInfo.dataDir ?? null }); return; }
+  try { pendingDir = await window.showDirectoryPicker({ id: 'stl-data', mode: 'readwrite', startIn: pendingDir || dataDir || 'documents' }); showDir(); }
+  catch (e) { if (e.name !== 'AbortError') toast(e.message, 5000); }
+}
+
+let buildInfo;
+async function renderBuildInfo() {
+  if (buildInfo === undefined) buildInfo = await fetch('build.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  const b = buildInfo || {};
+  const date = b.date ? new Date(b.date).toLocaleString(currentLang(), { dateStyle: 'long', timeStyle: 'short' }) : '–';
+  const commit = b.commit
+    ? `<a href="https://github.com/rvogelge/SmardTrackLayout/commit/${esc(b.commitFull || b.commit)}" target="_blank" rel="noopener"><code>${esc(b.commit)}</code></a>${b.dirty ? ' · ' + esc(tr('set.modified')) : ''}`
+    : esc(tr('set.unknown'));
+  $('#buildInfo').innerHTML = `<dt>${esc(tr('set.version'))}</dt><dd>${esc(b.version || '–')}</dd>`
+    + `<dt>${esc(tr('set.commit'))}</dt><dd>${commit}</dd><dt>${esc(tr('set.date'))}</dt><dd>${esc(date)}</dd>`;
+}
+
+function openSettings() {
+  const dlg = $('#dlgSettings'); if (dlg.open) return;
+  for (const d of document.querySelectorAll('dialog[open]')) d.close();
+  const ls = $('#setLang'); ls.innerHTML = '';
+  ls.append(new Option(tr('set.auto', { l: LANGS[systemLang()] }), 'auto'));
+  for (const [k, v] of Object.entries(LANGS)) ls.append(new Option(v, k));
+  ls.value = LANGS[settings.lang] ? settings.lang : 'auto';
+  const lib = $('#setLib'); fillLibSelect(lib);
+  lib.value = S.libList.includes(settings.defaultLib) ? settings.defaultLib : (S.libList.includes(DEFAULT_LIBS[0]) ? DEFAULT_LIBS[0] : S.libList[0]);
+  pendingDir = undefined; applyI18n(dlg); showDir(); renderBuildInfo();
+  dlg.showModal();
+}
+$('#dlgSettings').addEventListener('close', () => {
+  const dlg = $('#dlgSettings');
+  if (dlg.returnValue !== 'ok') { pendingDir = undefined; return; }
+  const langChanged = settings.lang !== $('#setLang').value;
+  settings.lang = $('#setLang').value;
+  settings.defaultLib = $('#setLib').value;
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* ignore */ }
+  if (pendingDir !== undefined) {
+    if (native) { nativeInfo.dataDir = pendingDir; native.postMessage({ type: 'setDataDir', path: pendingDir }); }
+    else { dataDir = pendingDir; storeDirHandle(pendingDir); }
+    pendingDir = undefined;
+  }
+  if (langChanged) applyLanguage();
+  native?.postMessage({ type: 'settings', lang: settings.lang });
+  toast(tr('set.saved'));
+});
+$('#btnSettings').onclick = openSettings;
+$('#setDirChoose').onclick = chooseDir;
+$('#setDirReset').onclick = () => { pendingDir = null; showDir(); };
+$('#setLang').onchange = () => { /* preview the dialog itself in the chosen language */
+  setLang($('#setLang').value); applyI18n($('#dlgSettings')); showDir(); renderBuildInfo(); setLang(settings.lang);
+};
+applyLanguage({ full: false });
 
 // ---------------------------------------------------------------- wiring
 $('#libSelect').addEventListener('change', (e) => selectLib(e.target.value));
@@ -1450,12 +1555,12 @@ $('#zoomOut').onclick = () => zoomCenter(0.8);
 $('#zoomFit').onclick = fitView;
 $('#chkLabels').onchange = (e) => { S.labels = e.target.checked; renderOverlay(); };
 $('#btnBom').onclick = showBom;
-$('#btnBomCsv').onclick = () => download(`${layoutName()} parts.csv`, 'Part no;Description;Manufacturer;Qty\n' + bomRows().map((r) => [r.partno, r.desc, r.mfr, r.n].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\n'), 'text/csv');
+$('#btnBomCsv').onclick = () => download(`${layoutName()} ${tr('bom.file')}.csv`, [tr('bom.pn'), tr('bom.desc'), tr('bom.mfr'), tr('bom.qty')].join(';') + '\n' + bomRows().map((r) => [r.partno, r.desc, r.mfr, r.n].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\n'), 'text/csv');
 $('#btnHelp').onclick = () => $('#dlgHelp').showModal();
 async function showLicense(file) {
   for (const b of document.querySelectorAll('#dlgLicenses .tab')) b.classList.toggle('on', b.dataset.file === file);
-  const pre = $('#licenseText'); pre.textContent = 'Loading…';
-  pre.textContent = await fetch(file).then((r) => (r.ok ? r.text() : Promise.reject(new Error(r.statusText)))).catch((e) => 'Could not load ' + file + ': ' + e.message);
+  const pre = $('#licenseText'); pre.textContent = tr('loading');
+  pre.textContent = await fetch(file).then((r) => (r.ok ? r.text() : Promise.reject(new Error(r.statusText)))).catch((e) => tr('lic.failed', { f: file, e: e.message }));
   pre.scrollTop = 0;
 }
 function openLicenses() { $('#dlgHelp').close(); $('#dlgLicenses').showModal(); showLicense('legal/NOTICE.txt'); }
@@ -1467,7 +1572,7 @@ $('#btnOpen').onclick = openFile;
 $('#btnNew').onclick = newLayout;
 $('#fileImport').onchange = async (e) => {
   const f = e.target.files[0]; if (!f) return;
-  try { await loadDoc(JSON.parse(await f.text())); fileHandle = null; hasFile = false; $('#layoutName').value = baseName(f.name); S.dirty = false; updateStatus(); } catch (err) { toast('Open failed: ' + err.message, 5000); }
+  try { await loadDoc(JSON.parse(await f.text())); fileHandle = null; hasFile = false; $('#layoutName').value = baseName(f.name); S.dirty = false; updateStatus(); } catch (err) { toast(tr('openFailed', { e: err.message }), 5000); }
   e.target.value = '';
 };
 $('#layoutName').addEventListener('change', () => { S.dirty = true; updateStatus(); });
@@ -1486,7 +1591,8 @@ window.stlApp = {
   rotate: (d) => rotateSelection(d ?? step()),
   fit: fitView, partsList: showBom, help: () => $('#dlgHelp').showModal(),
   toggleLabels: () => $('#chkLabels').click(), tool: setTool,
-  licenses: () => openLicenses(),
+  licenses: () => openLicenses(), settings: () => openSettings(),
+  dataDirChosen: (path) => { if (path) { pendingDir = path; showDir(); } },
   copy: () => copySelection(), cut: () => cutSelection(), paste: () => pasteClip(), duplicate: () => duplicateSelection(),
 };
 
@@ -1500,9 +1606,12 @@ window.stlApp = {
   fillLibSelect();
   let saved = null, lastLib = null;
   try { saved = JSON.parse(localStorage.getItem('stl.autosave') || 'null'); lastLib = localStorage.getItem('stl.lib'); } catch { /* ignore */ }
-  const lib = [lastLib, ...DEFAULT_LIBS].find((f) => f && S.libList.includes(f)) || S.libList[0];
+  const resume = saved && (saved.parts?.length || saved.shapes?.length);
+  // continue with the library last used for the autosaved work; a fresh start uses the default library from the settings
+  const lib = [resume ? lastLib : null, settings.defaultLib, ...DEFAULT_LIBS].find((f) => f && S.libList.includes(f)) || S.libList[0];
   await selectLib(lib);
-  if (saved && (saved.parts?.length || saved.shapes?.length)) {
+  if (canPickDir) dataDir = (await loadDirHandle()) || null;
+  if (resume) {
     await loadDoc(saved, { keepView: !!saved.view }).catch(() => {});
     S.dirty = !!saved.dirty;
     if (saved.view) { S.view = saved.view; applyView(); }

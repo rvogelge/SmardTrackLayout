@@ -15,6 +15,7 @@ HOST="${DEPLOY_HOST:-pi@192.168.178.74}"
 DIR="${DEPLOY_DIR:-SmardTrackLayout}"
 cd "$(dirname "$0")"
 
+scripts/build-info.sh public/build.json
 rsync -az --delete --exclude .git --exclude data --exclude node_modules ./ "$HOST:$DIR/"
 ssh "$HOST" "cd $DIR && docker compose up -d --build && docker image prune -f >/dev/null && docker compose ps"
 echo "Deployed: http://${HOST#*@}:8080/"

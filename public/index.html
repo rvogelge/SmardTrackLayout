@@ -12,41 +12,42 @@
 <header class="toolbar">
   <div class="brand"><img src="favicon.svg" alt=""><span>SmardTrackLayout</span></div>
   <div class="tgroup">
-    <input id="layoutName" class="name" value="Untitled" title="Layout name" spellcheck="false">
-    <button id="btnNew" title="New layout">New</button>
-    <button id="btnOpen" title="Open a layout file (Ctrl+O)">Open…</button>
-    <button id="btnSave" title="Save to the current file (Ctrl+S)">Save</button>
-    <button id="btnSaveAs" title="Save to a new file (Ctrl+Shift+S)">Save as…</button>
+    <input id="layoutName" class="name" value="Untitled" data-i18n-title="name.title" title="Layout name" spellcheck="false">
+    <button id="btnNew" data-i18n="new" data-i18n-title="new.title">New</button>
+    <button id="btnOpen" data-i18n="open" data-i18n-title="open.title">Open…</button>
+    <button id="btnSave" data-i18n="save" data-i18n-title="save.title">Save</button>
+    <button id="btnSaveAs" data-i18n="saveAs" data-i18n-title="saveAs.title">Save as…</button>
     <input id="fileImport" type="file" accept=".json,application/json" hidden>
   </div>
   <div class="tgroup">
-    <button id="btnUndo" title="Undo (Ctrl+Z)">↶</button>
-    <button id="btnRedo" title="Redo (Ctrl+Shift+Z)">↷</button>
+    <button id="btnUndo" data-i18n-title="undo.title">↶</button>
+    <button id="btnRedo" data-i18n-title="redo.title">↷</button>
   </div>
   <div class="tgroup">
-    <button id="btnRotL" title="Rotate counter-clockwise (Shift+R)">↺</button>
-    <label class="angle" title="Rotation angle / step in degrees (type any value)"><input id="rotStep" list="rotSteps" value="15" inputmode="decimal" spellcheck="false">°</label>
+    <button id="btnRotL" data-i18n-title="rotL.title">↺</button>
+    <label class="angle" data-i18n-title="rotStep.title"><input id="rotStep" list="rotSteps" value="15" inputmode="decimal" spellcheck="false">°</label>
     <datalist id="rotSteps"><option value="1"><option value="5"><option value="7.5"><option value="15"><option value="22.5"><option value="30"><option value="45"><option value="90"><option value="180"></datalist>
-    <button id="btnRotR" title="Rotate clockwise (R)">↻</button>
-    <button id="btnFlip" title="Attach the last placed piece by its next endpoint (Tab)">Flip end</button>
-    <button id="btnDelete" title="Delete selection (Del)">Delete</button>
+    <button id="btnRotR" data-i18n-title="rotR.title">↻</button>
+    <button id="btnFlip" data-i18n="flip" data-i18n-title="flip.title">Flip end</button>
+    <button id="btnDelete" data-i18n="delete" data-i18n-title="delete.title">Delete</button>
   </div>
   <div class="tgroup">
-    <button id="btnFit" title="Zoom to fit (F)">Fit</button>
-    <label class="toggle" title="Show part numbers"><input id="chkLabels" type="checkbox"> Labels</label>
-    <button id="btnBom" title="Parts list">Parts list</button>
-    <button id="btnHelp" title="Help">?</button>
+    <button id="btnFit" data-i18n="fit" data-i18n-title="fit.title">Fit</button>
+    <label class="toggle" data-i18n-title="labels.title"><input id="chkLabels" type="checkbox"> <span data-i18n="labels">Labels</span></label>
+    <button id="btnBom" data-i18n="bom" data-i18n-title="bom.title">Parts list</button>
+    <button id="btnHelp" data-i18n-title="help.title">?</button>
+    <button id="btnSettings" class="icon" data-i18n-title="settings.title" aria-label="Settings"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 6.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8z"/><path d="M8.6 2h2.8l.4 2.2 1.6.7 1.9-1.3 2 2-1.3 1.9.7 1.6 2.2.4v2.8l-2.2.4-.7 1.6 1.3 1.9-2 2-1.9-1.3-1.6.7-.4 2.2H8.6l-.4-2.2-1.6-.7-1.9 1.3-2-2 1.3-1.9-.7-1.6L1 11.4V8.6l2.2-.4.7-1.6-1.3-1.9 2-2 1.9 1.3 1.6-.7z"/></svg></button>
   </div>
 </header>
 
 <aside class="sidebar">
   <label class="field">
-    <span>Library <small>(XTrackCAD, SourceForge)</small></span>
+    <span><span data-i18n="lib.label">Library</span> <small data-i18n="lib.src">(XTrackCAD, SourceForge)</small></span>
     <select id="libSelect"></select>
   </label>
   <div id="libTitle" class="libtitle"></div>
-  <input id="partSearch" type="search" placeholder="Filter parts… (e.g. 24130, Weiche)">
-  <div id="palette" class="palette"><div class="muted pad">Loading…</div></div>
+  <input id="partSearch" type="search" data-i18n-ph="search.ph" placeholder="Filter parts… (e.g. 24130, Weiche)">
+  <div id="palette" class="palette"><div class="muted pad" data-i18n="loading">Loading…</div></div>
 </aside>
 
 <main class="stage">
@@ -60,29 +61,29 @@
     <g id="ui"></g>
     <rect id="boxSel" class="boxsel"></rect>
   </svg>
-  <div class="drawbar" role="toolbar" aria-label="Drawing tools">
-    <button data-tool="select" class="on" title="Select / move (V)"><svg viewBox="0 0 20 20"><path d="M5 3l10 7-4.5 1 2.5 5-2 1-2.5-5L5 15z"/></svg></button>
-    <button data-tool="line" title="Line (L)"><svg viewBox="0 0 20 20"><path d="M4 16L16 4"/><circle cx="4" cy="16" r="1.6"/><circle cx="16" cy="4" r="1.6"/></svg></button>
-    <button data-tool="poly" title="Polyline / outline (P)"><svg viewBox="0 0 20 20"><path d="M3 16V8l6-4 8 3v9z"/></svg></button>
-    <button data-tool="rect" title="Rectangle, e.g. baseboard (B)"><svg viewBox="0 0 20 20"><rect x="3" y="5" width="14" height="10"/></svg></button>
-    <button data-tool="circle" title="Circle (O)"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="6.5"/></svg></button>
-    <button data-tool="dim" title="Dimension (D)"><svg viewBox="0 0 20 20"><path d="M3 6v9M17 6v9M3 10.5h14M3 10.5l3-2v4zM17 10.5l-3-2v4z"/></svg></button>
-    <button data-tool="text" title="Text (T)"><svg viewBox="0 0 20 20"><path d="M4 5h12M10 5v11"/></svg></button>
+  <div class="drawbar" role="toolbar" data-i18n-aria="tools.aria" aria-label="Drawing tools">
+    <button data-tool="select" class="on" data-i18n-title="tool.select" title="Select / move (V)"><svg viewBox="0 0 20 20"><path d="M5 3l10 7-4.5 1 2.5 5-2 1-2.5-5L5 15z"/></svg></button>
+    <button data-tool="line" data-i18n-title="tool.line" title="Line (L)"><svg viewBox="0 0 20 20"><path d="M4 16L16 4"/><circle cx="4" cy="16" r="1.6"/><circle cx="16" cy="4" r="1.6"/></svg></button>
+    <button data-tool="poly" data-i18n-title="tool.poly" title="Polyline / outline (P)"><svg viewBox="0 0 20 20"><path d="M3 16V8l6-4 8 3v9z"/></svg></button>
+    <button data-tool="rect" data-i18n-title="tool.rect" title="Rectangle, e.g. baseboard (B)"><svg viewBox="0 0 20 20"><rect x="3" y="5" width="14" height="10"/></svg></button>
+    <button data-tool="circle" data-i18n-title="tool.circle" title="Circle (O)"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="6.5"/></svg></button>
+    <button data-tool="dim" data-i18n-title="tool.dim" title="Dimension (D)"><svg viewBox="0 0 20 20"><path d="M3 6v9M17 6v9M3 10.5h14M3 10.5l3-2v4zM17 10.5l-3-2v4z"/></svg></button>
+    <button data-tool="text" data-i18n-title="tool.text" title="Text (T)"><svg viewBox="0 0 20 20"><path d="M4 5h12M10 5v11"/></svg></button>
     <span class="sep"></span>
-    <label title="Snap drawing to a grid">Grid
-      <select id="gridSnap"><option value="0">off</option><option value="1">1 mm</option><option value="5">5 mm</option><option value="10" selected>10 mm</option><option value="50">50 mm</option><option value="100">100 mm</option></select>
+    <label data-i18n-title="grid.title"><span data-i18n="grid">Grid</span>
+      <select id="gridSnap"><option value="0" data-i18n="grid.off">off</option><option value="1">1 mm</option><option value="5">5 mm</option><option value="10" selected>10 mm</option><option value="50">50 mm</option><option value="100">100 mm</option></select>
     </label>
-    <label title="Add width/height dimensions to new rectangles"><input id="chkAutoDim" type="checkbox" checked> Auto-dimension</label>
+    <label data-i18n-title="autodim.title"><input id="chkAutoDim" type="checkbox" checked> <span data-i18n="autodim">Auto-dimension</span></label>
   </div>
   <div id="measure" class="measure" hidden></div>
   <div id="props" class="props" hidden></div>
   <div class="zoombar" role="group" aria-label="Zoom">
-    <button id="zoomOut" title="Zoom out (−)">−</button><button id="zoomFit" title="Fit everything (F)">Fit</button><button id="zoomIn" title="Zoom in (+)">+</button>
+    <button id="zoomOut" data-i18n-title="zoomOut.title">−</button><button id="zoomFit" data-i18n="fit" data-i18n-title="zoomFit.title">Fit</button><button id="zoomIn" data-i18n-title="zoomIn.title">+</button>
   </div>
   <div id="emptyHint" class="emptyhint">
-    <strong>Pick a piece from the library</strong>
-    Click to place it. The next piece connects to the highlighted open end.<br>
-    Drag pieces near an open end to snap them together.<br>Use the drawing tools (top left) for baseboard outlines and dimensions.
+    <strong data-i18n="empty.title">Pick a piece from the library</strong>
+    <span data-i18n-html="empty.body">Click to place it. The next piece connects to the highlighted open end.<br>
+    Drag pieces near an open end to snap them together.<br>Use the drawing tools (top left) for baseboard outlines and dimensions.</span>
   </div>
 </main>
 
@@ -97,62 +98,80 @@
 
 <dialog id="dlgName">
   <form method="dialog">
-    <h2>Save layout as</h2>
-    <input id="saveName" class="wide" placeholder="Layout name" spellcheck="false" maxlength="80">
-    <p class="muted">The file is saved to your downloads as <i>name</i>.stl.json.</p>
-    <menu><button value="cancel" formnovalidate>Cancel</button><button value="ok" class="primary">Save</button></menu>
+    <h2 data-i18n="dlg.saveAs">Save layout as</h2>
+    <input id="saveName" class="wide" data-i18n-ph="dlg.saveAs.ph" placeholder="Layout name" spellcheck="false" maxlength="80">
+    <p class="muted" data-i18n-html="dlg.saveAs.note">The file is saved to your downloads as <i>name</i>.stl.json.</p>
+    <menu><button value="cancel" formnovalidate data-i18n="cancel">Cancel</button><button value="ok" class="primary" data-i18n="save">Save</button></menu>
   </form>
 </dialog>
 
 <dialog id="dlgText">
   <form method="dialog">
-    <h2>Text</h2>
-    <input id="textValue" class="wide" placeholder="e.g. Bahnhof Neustadt" spellcheck="false">
-    <label class="inline">Height <input id="textSize" type="number" min="1" step="1" value="40"> mm</label>
-    <menu><button value="cancel" formnovalidate>Cancel</button><button value="ok" class="primary">OK</button></menu>
+    <h2 data-i18n="dlg.text">Text</h2>
+    <input id="textValue" class="wide" data-i18n-ph="text.ph" placeholder="e.g. Bahnhof Neustadt" spellcheck="false">
+    <label class="inline"><span data-i18n="text.height">Height</span> <input id="textSize" type="number" min="1" step="1" value="40"> mm</label>
+    <menu><button value="cancel" formnovalidate data-i18n="cancel">Cancel</button><button value="ok" class="primary" data-i18n="ok">OK</button></menu>
   </form>
 </dialog>
 
 <dialog id="dlgBom">
   <form method="dialog">
-    <h2>Parts list</h2>
+    <h2 data-i18n="bom">Parts list</h2>
     <div id="bomBody"></div>
-    <menu><button id="btnBomCsv" value="csv" type="button">Download CSV</button><button value="cancel">Close</button></menu>
+    <menu><button id="btnBomCsv" value="csv" type="button" data-i18n="bom.csv">Download CSV</button><button value="cancel" data-i18n="close">Close</button></menu>
   </form>
 </dialog>
 
 <dialog id="dlgHelp">
   <form method="dialog">
-    <h2>How to use</h2>
+    <h2 data-i18n="help.heading">How to use</h2>
     <ul class="help">
-      <li><b>Place:</b> click a piece in the library. It attaches to the highlighted open end (or appears in the centre). You can also drag it onto the canvas.</li>
-      <li><b>Flip end</b> (<kbd>Tab</kbd>): attach the last placed piece by its other endpoint, e.g. to make a curve bend right instead of left.</li>
-      <li><b>Connect:</b> drag a piece close to an open end and it snaps on. Open ends are orange; the active one (where the next piece goes) is larger and blue. Click an open end to make it active.</li>
-      <li><b>Mark:</b> click an item; <kbd>Shift</kbd>+click adds or removes. <kbd>Shift</kbd>+drag on empty space marks an area: left→right marks what is completely inside, right→left also what it touches. Double-click a track piece to mark everything connected. Click empty space or press <kbd>Esc</kbd> to unmark.</li>
-      <li><b>Rotate:</b> drag the round handle above the selection (snaps to the angle field; hold <kbd>Shift</kbd> for free rotation), or <kbd>R</kbd> / <kbd>Shift</kbd>+<kbd>R</kbd> by the angle in the toolbar (type any value). <kbd>Ctrl</kbd>+<kbd>A</kbd> then rotate turns the whole design. <b>Delete:</b> <kbd>Del</kbd>.</li>
-      <li><b>Draw</b> (toolbar on the canvas): line <kbd>L</kbd>, polyline <kbd>P</kbd>, rectangle <kbd>B</kbd>, circle <kbd>O</kbd>, dimension <kbd>D</kbd>, text <kbd>T</kbd>, back to select <kbd>V</kbd>/<kbd>Esc</kbd>. Points snap to the grid, to corners and to track ends. While drawing, type a length in mm (rectangle: <code>2400x1200</code>) and press <kbd>Enter</kbd>; <kbd>Shift</kbd> locks to 15° steps. Select a single drawing to drag its corner handles; double-click text to edit it.</li>
-      <li><b>Rectangle size:</b> mark a rectangle and type Size X / Size Y in the panel at the top right (<kbd>Enter</kbd> jumps into it). Rectangles: drag a side line to change only the size in that direction, drag a corner to change both (it stays a rectangle), drag inside a marked rectangle to move it. Their dimensions follow.</li>
-      <li><b>Save</b> (<kbd>Ctrl</kbd>+<kbd>S</kbd>) writes to the file the layout was opened from or last saved to; <b>Save as…</b> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) chooses a new file. <b>Open…</b> (<kbd>Ctrl</kbd>+<kbd>O</kbd>) loads a file. (Browsers other than Chrome/Edge can only download, so there Save works like Save as….) Your current work is also kept automatically between sessions.</li>
-      <li><b>Move the workspace:</b> drag on empty space, or swipe with two fingers on the trackpad (also right/middle-drag, or <kbd>Space</kbd>+drag while drawing). <b>Zoom:</b> mouse wheel, pinch on the trackpad, <kbd>+</kbd>/<kbd>−</kbd>, or the buttons bottom right; <kbd>F</kbd> fits everything.</li>
-      <li><b>Copy / paste:</b> <kbd>Ctrl</kbd>+<kbd>C</kbd>, <kbd>Ctrl</kbd>+<kbd>X</kbd>, <kbd>Ctrl</kbd>+<kbd>V</kbd> copy, cut and paste the marked items (track and drawings; a rectangle brings its dimensions along). Paste puts them at the mouse pointer. <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicates in place, slightly offset. Works between tabs/windows too. (On a Mac: <kbd>⌘</kbd> instead of <kbd>Ctrl</kbd>.)</li>
-      <li><b>Undo:</b> <kbd>Ctrl</kbd>+<kbd>Z</kbd>, redo <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>. Your work is also autosaved in this browser.</li>
+      <li data-i18n-html="help.1"></li>
+      <li data-i18n-html="help.2"></li>
+      <li data-i18n-html="help.3"></li>
+      <li data-i18n-html="help.4"></li>
+      <li data-i18n-html="help.5"></li>
+      <li data-i18n-html="help.6"></li>
+      <li data-i18n-html="help.7"></li>
+      <li data-i18n-html="help.8"></li>
+      <li data-i18n-html="help.9"></li>
+      <li data-i18n-html="help.10"></li>
+      <li data-i18n-html="help.11"></li>
     </ul>
-    <p class="muted">SmardTrackLayout © 2026 Rolf Vogelgesang, free software under the GNU GPL v3 or later (no warranty). Track geometry: XTrackCAD parameter libraries (GPL&nbsp;v2 or later), from the <a href="https://sourceforge.net/p/xtrkcad-fork/" target="_blank" rel="noopener">XTrackCAD project</a> on SourceForge. Manufacturer names are trademarks of their owners.</p>
-    <menu><button id="btnLicenses" type="button">Licenses…</button><button value="cancel">Close</button></menu>
+    <p class="muted" data-i18n-html="help.about">SmardTrackLayout © 2026 Rolf Vogelgesang, free software under the GNU GPL v3 or later (no warranty). Track geometry: XTrackCAD parameter libraries (GPL&nbsp;v2 or later), from the <a href="https://sourceforge.net/p/xtrkcad-fork/" target="_blank" rel="noopener">XTrackCAD project</a> on SourceForge. Manufacturer names are trademarks of their owners.</p>
+    <menu><button id="btnLicenses" type="button" data-i18n="licenses">Licenses…</button><button value="cancel" data-i18n="close">Close</button></menu>
   </form>
 </dialog>
 
 <dialog id="dlgLicenses" class="wide">
   <form method="dialog">
-    <h2>Licenses &amp; credits</h2>
+    <h2 data-i18n="lic.heading">Licenses &amp; credits</h2>
     <div class="tabs" role="tablist">
       <button type="button" class="tab on" data-file="legal/NOTICE.txt">SmardTrackLayout</button>
-      <button type="button" class="tab" data-file="legal/THIRD_PARTY_NOTICES.txt">Third-party notices</button>
+      <button type="button" class="tab" data-file="legal/THIRD_PARTY_NOTICES.txt" data-i18n="lic.third">Third-party notices</button>
       <button type="button" class="tab" data-file="legal/GPL-3.0.txt">GNU GPL v3</button>
       <button type="button" class="tab" data-file="legal/GPL-2.0.txt">GNU GPL v2</button>
     </div>
     <pre id="licenseText" class="licensetext">Loading…</pre>
-    <menu><button value="cancel">Close</button></menu>
+    <menu><button value="cancel" data-i18n="close">Close</button></menu>
+  </form>
+</dialog>
+
+<dialog id="dlgSettings">
+  <form method="dialog" class="settings">
+    <h2 data-i18n="set.heading">Settings</h2>
+    <label class="field"><span data-i18n="set.lang">Language</span><select id="setLang"></select></label>
+    <label class="field"><span data-i18n="set.lib">Default track library for new layouts</span><select id="setLib"></select></label>
+    <div class="field">
+      <span data-i18n="set.dir">Default data folder</span>
+      <div class="dirrow"><code id="setDirPath"></code><button type="button" id="setDirChoose" data-i18n="set.dir.choose">Choose…</button><button type="button" id="setDirReset" data-i18n="set.dir.reset">Use Documents</button></div>
+      <small id="setDirNote"></small>
+    </div>
+    <div class="field">
+      <span data-i18n="set.build">About this build</span>
+      <dl id="buildInfo" class="buildinfo"></dl>
+    </div>
+    <menu><button value="cancel" formnovalidate data-i18n="cancel">Cancel</button><button value="ok" class="primary" data-i18n="save">Save</button></menu>
   </form>
 </dialog>
 
