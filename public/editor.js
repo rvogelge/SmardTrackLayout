@@ -278,6 +278,7 @@ function buildShapeEl(s) {
     const d = s.type === 'circle'
       ? circleD(s.pts[0], Math.hypot(s.pts[1][0] - s.pts[0][0], s.pts[1][1] - s.pts[0][1]))
       : ptsD(s.pts, s.type === 'poly' && s.closed);
+    if (isRect(s)) { g.classList.add('rect'); g.append(el('path', { class: 'hitfill', d })); }
     g.append(el('path', { class: 'hit', d }), el('path', { class: 'stroke', d }));
   }
   return g;
@@ -483,7 +484,7 @@ function rotateSelection(delta) {
   pushUndo();
   const b = unionBBox(items), cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
   for (const it of items) { rotateItem(it, cx, cy, delta); if (!it.pts) setPose(S.els.get(it.id), it); }
-  if (items.some((it) => it.pts)) renderShapes();
+  if (items.some((it) => it.pts)) { normalizeRects(); renderShapes(); }
   S.lastPlace = null;
   refresh();
 }
@@ -579,7 +580,57 @@ function addShape(s) {
 }
 // rectangles: closed 4-point polys, counter-clockwise from the lower-left corner,
 // so edge 0 = width (bottom), edge 1 = height (right); negative dim offsets lie outside
-const isRect = (s) => s?.type === 'poly' && s.rect && s.pts.length === 4;
+function isRect(s) {
+  if (s?.type !== 'poly' || !s.closed || s.pts.length !== 4) return false;
+  for (let i = 0; i < 4; i++) {
+    const a = s.pts[i], b = s.pts[(i + 1) % 4], c = s.pts[(i + 2) % 4];
+    const u = [b[0] - a[0], b[1] - a[1]], v = [c[0] - b[0], c[1] - b[1]];
+    const lu = Math.hypot(...u), lv = Math.hypot(...v);
+    if (lu < 1e-6 || lv < 1e-6 || Math.abs(u[0] * v[0] + u[1] * v[1]) / (lu * lv) > 0.01) return false;
+  }
+  return true;
+}
+// put rectangle corners in a fixed order: counter-clockwise, starting so edge 0 points along +x
+// (then edge 0 = size in X, edge 1 = size in Y); linked dimensions are re-pointed to the same edges
+function normalizeRect(s) {
+  if (!isRect(s)) return;
+  const P = s.pts;
+  let area = 0; for (let i = 0; i < 4; i++) { const a = P[i], b = P[(i + 1) % 4]; area += a[0] * b[1] - b[0] * a[1]; }
+  const idx = area < 0 ? [0, 3, 2, 1] : [0, 1, 2, 3];
+  let best = 0, score = -Infinity;
+  for (let k = 0; k < 4; k++) {
+    const a = P[idx[k]], b = P[idx[(k + 1) % 4]], ux = (b[0] - a[0]) / (Math.hypot(b[0] - a[0], b[1] - a[1]) || 1);
+    if (ux > score + 1e-9) { score = ux; best = k; }
+  }
+  const order = [0, 1, 2, 3].map((j) => idx[(best + j) % 4]);
+  s.rect = true;
+  if (order.every((o, j) => o === j)) return;
+  s.pts = order.map((o) => [...P[o]]);
+  for (const d of S.shapes) {
+    if (d.type !== 'dim' || d.ref?.shape !== s.id) continue;
+    const na = order.indexOf(d.ref.edge), nb = order.indexOf((d.ref.edge + 1) % 4);
+    d.ref = (na + 1) % 4 === nb ? { shape: s.id, edge: na, rev: !!d.ref.rev } : { shape: s.id, edge: nb, rev: !d.ref.rev };
+  }
+}
+const normalizeRects = () => { for (const s of S.shapes) if (s.type === 'poly') normalizeRect(s); };
+
+// which part of a rectangle is under the pointer: a corner, an edge, or the inside
+function rectGrip(s, wx, wy) {
+  const tol = 9 / S.view.z;
+  for (let k = 0; k < 4; k++) if (Math.hypot(s.pts[k][0] - wx, s.pts[k][1] - wy) < tol * 1.2) return { mode: 'rcorner', idx: k };
+  for (let i = 0; i < 4; i++) {
+    const a = s.pts[i], b = s.pts[(i + 1) % 4], ab = [b[0] - a[0], b[1] - a[1]], L2 = ab[0] ** 2 + ab[1] ** 2;
+    const t = Math.max(0, Math.min(1, ((wx - a[0]) * ab[0] + (wy - a[1]) * ab[1]) / L2));
+    if (Math.hypot(a[0] + ab[0] * t - wx, a[1] + ab[1] * t - wy) < tol) return { mode: 'redge', idx: i };
+  }
+  return null;
+}
+function gripCursor(s, grip) {
+  if (!grip) return 'move';
+  const a = s.pts[grip.idx], b = s.pts[(grip.idx + 1) % 4];
+  if (grip.mode === 'redge') return Math.abs(b[0] - a[0]) > Math.abs(b[1] - a[1]) ? 'ns-resize' : 'ew-resize';
+  return grip.idx % 2 === 0 ? 'nesw-resize' : 'nwse-resize';
+}
 function makeRect(a, b) {
   const x0 = Math.min(a[0], b[0]), x1 = Math.max(a[0], b[0]), y0 = Math.min(a[1], b[1]), y1 = Math.max(a[1], b[1]);
   return { type: 'poly', closed: true, rect: true, pts: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]] };
@@ -606,6 +657,7 @@ function findEdgeRef(p1, p2) {
 function commitShape(s, { autoDims = false } = {}) {
   pushUndo();
   addShape(s);
+  if (s.type === 'poly') normalizeRect(s);
   if (s.type === 'dim') { const ref = findEdgeRef(...s.pts); if (ref) s.ref = ref; }
   if (autoDims && S.autoDim) addRectDims(s);
   renderShapes(); updateStatus();
@@ -752,8 +804,9 @@ function propFields(s) {
   };
   if (isRect(s)) {
     const [w, h] = rectSize(s);
-    num('w', 'Width', mm(w), 'mm', (v) => setRectSize(s, 0, v / MM), 1);
-    num('h', 'Height', mm(h), 'mm', (v) => setRectSize(s, 1, v / MM), 1);
+    const straight = Math.abs(s.pts[1][1] - s.pts[0][1]) < 1e-6;
+    num('w', straight ? 'Size X' : 'Width', mm(w), 'mm', (v) => setRectSize(s, 0, v / MM), 1);
+    num('h', straight ? 'Size Y' : 'Height', mm(h), 'mm', (v) => setRectSize(s, 1, v / MM), 1);
     num('a', 'Angle', r2(segAng(s.pts[0], s.pts[1])), '°', (v) => rotateShapeTo(s, segAng(s.pts[0], s.pts[1]), v));
     xy();
   } else if (s.type === 'line') {
@@ -813,7 +866,7 @@ function applyProp(k, raw) {
     if (!isFinite(v)) { propsKey = ''; renderProps(); return; }
     if (f.min != null) v = Math.max(f.min, v);
   }
-  pushUndo(); f.set(v); renderShapes(); refresh();
+  pushUndo(); f.set(v); normalizeRect(s); renderShapes(); refresh();
   const nf = propFields(s).find((x) => x.key === k), inp = propsEl.querySelector(`input[data-k="${k}"]`);
   if (nf && inp) inp.value = nf.val;
 }
@@ -856,7 +909,15 @@ svg.addEventListener('pointerdown', (ev) => {
     renderOverlay(); updateStatus(); return;
   }
   if (itemEl) {
-    const id = +itemEl.dataset.id;
+    const id = +itemEl.dataset.id, rs = shapeById(id);
+    if (isRect(rs) && !ev.shiftKey && (!S.sel.has(id) || S.sel.size === 1)) {
+      const grip = rectGrip(rs, wx, wy);
+      if (grip) {
+        S.sel = new Set([id]); renderSelection(); renderUI(); updateStatus();
+        S.drag = { mode: grip.mode, id, idx: grip.idx, orig: clone(rs.pts), moved: false };
+        return;
+      }
+    }
     if (ev.shiftKey) { if (S.sel.has(id)) S.sel.delete(id); else S.sel.add(id); }
     else if (!S.sel.has(id)) S.sel = new Set([id]);
     renderSelection(); renderUI(); updateStatus();
@@ -931,6 +992,10 @@ svg.addEventListener('pointermove', (ev) => {
   $('#stCoords').textContent = `x ${mm(wx)} mm · y ${mm(wy)} mm`;
   const D = S.drag;
   if (!D) {
+    if (S.tool === 'select') { // resize cursors over rectangle sides and corners
+      const g = ev.target.closest?.('.shape.rect'), rs = g && shapeById(+g.dataset.id);
+      if (rs && (!S.sel.has(rs.id) || S.sel.size === 1)) g.style.cursor = gripCursor(rs, rectGrip(rs, wx, wy));
+    }
     if (S.tool !== 'select') {
       const p = draftPoint(ev); S.cursor = p;
       if (S.draft) S.draft.cur = [p.x, p.y];
@@ -998,7 +1063,7 @@ function endDrag(ev) {
   $('#measure').hidden = S.tool === 'select' || !S.draft;
   if (!D) return;
   if (D.mode === 'pan') S.lastPanMoved = D.moved;
-  if (['move', 'rotate', 'vertex', 'off', 'redge', 'rcorner'].includes(D.mode)) { S.snap = null; renderShapes(); refresh(); }
+  if (['move', 'rotate', 'vertex', 'off', 'redge', 'rcorner'].includes(D.mode)) { S.snap = null; normalizeRects(); renderShapes(); refresh(); }
   if (D.mode === 'box') {
     showBox(false); clearPresel();
     if (ev.type !== 'pointerup') return;
@@ -1131,6 +1196,8 @@ async function loadDoc(doc, { keepView = false } = {}) {
     if (old != null) idMap.set(old, c.id);
   }
   for (const s of S.shapes) if (s.ref) { const id = idMap.get(s.ref.shape); if (id) s.ref.shape = id; else delete s.ref; }
+  normalizeRects();
+  for (const d of S.shapes) if (d.type === 'dim' && !d.ref) { const ref = findEdgeRef(...d.pts); if (ref) d.ref = ref; } // older files
   S.sel.clear(); S.active = null; S.lastPlace = null; S.undo = []; S.redo = [];
   $('#layoutName').value = doc.name || 'Untitled';
   setTool('select');
@@ -1148,11 +1215,34 @@ function scheduleAutosave() {
   }, 400);
 }
 
-// Save as…: write the layout to a JSON file of the user's choice
-function saveAs() {
-  const d = layoutDoc();
-  download(d.name + '.stl.json', JSON.stringify(d, null, 1), 'application/json');
-  S.dirty = false; updateStatus();
+// Save as…: write the layout to a file; the chosen file name becomes the layout name
+const baseName = (f) => String(f).split(/[\\/]/).pop().replace(/\.json$/i, '').replace(/\.stl$/i, '');
+function docFor(name) { $('#layoutName').value = name; return JSON.stringify(layoutDoc(), null, 1); }
+function savedAs(name) { $('#layoutName').value = name; S.dirty = false; updateStatus(); toast(`Saved “${name}”`); }
+
+async function saveAs() {
+  const name = layoutName();
+  if (native) { native.postMessage({ type: 'saveAs', name: name + '.stl.json' }); return; } // app shows the save panel, then calls docFor/savedAs
+  if (window.showSaveFilePicker) {
+    try {
+      const h = await window.showSaveFilePicker({ suggestedName: name + '.stl.json', types: [{ description: 'SmardTrackLayout layout', accept: { 'application/json': ['.json'] } }] });
+      const n = baseName(h.name), w = await h.createWritable();
+      await w.write(docFor(n)); await w.close();
+      savedAs(n);
+    } catch (e) { if (e.name !== 'AbortError') toast('Save failed: ' + e.message, 5000); }
+    return;
+  }
+  // browsers without a save dialog API: ask for the name, then download
+  const dlg = $('#dlgName'), input = $('#saveName');
+  input.value = name === 'Untitled' ? '' : name;
+  dlg.showModal(); input.focus(); input.select();
+  dlg.onclose = () => {
+    dlg.onclose = null;
+    const n = input.value.trim();
+    if (dlg.returnValue !== 'ok' || !n) return;
+    download(n + '.stl.json', docFor(n), 'application/json');
+    savedAs(n);
+  };
 }
 const openFile = () => {
   if (S.dirty && S.parts.length + S.shapes.length && !confirm('Discard unsaved changes to the current layout?')) return;
@@ -1207,7 +1297,7 @@ $('#btnOpen').onclick = openFile;
 $('#btnNew').onclick = newLayout;
 $('#fileImport').onchange = async (e) => {
   const f = e.target.files[0]; if (!f) return;
-  try { await loadDoc(JSON.parse(await f.text())); S.dirty = false; updateStatus(); } catch (err) { toast('Open failed: ' + err.message, 5000); }
+  try { await loadDoc(JSON.parse(await f.text())); $('#layoutName').value = baseName(f.name); S.dirty = false; updateStatus(); } catch (err) { toast('Open failed: ' + err.message, 5000); }
   e.target.value = '';
 };
 $('#layoutName').addEventListener('change', () => { S.dirty = true; updateStatus(); });
@@ -1220,7 +1310,7 @@ window.addEventListener('beforeunload', (e) => { if (!native && S.dirty && S.par
 // API for the macOS app menus
 const inField = () => document.activeElement?.matches?.('input, textarea');
 window.stlApp = {
-  newLayout, open: openFile, openFile, save: saveAs, saveAs, saveToFile: saveAs,
+  newLayout, open: openFile, openFile, save: saveAs, saveAs, saveToFile: saveAs, docFor, savedAs,
   undo: () => (inField() ? document.execCommand('undo') : undo()),
   redo: () => (inField() ? document.execCommand('redo') : redo()),
   rotate: (d) => rotateSelection(d ?? step()),

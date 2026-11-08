@@ -240,11 +240,13 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
         for (const pn of ['24130','24130','24130','24130','24130','24130','24188','24130','24130','24130','24130','24130','24130','24188']) await click(pn);
         const counts = document.querySelector('#stCounts').textContent;
         const lib = await (await fetch('api/library?file=' + encodeURIComponent('HO-Piko-A.xtp'))).text();
-        return JSON.stringify({ counts, piko: lib.split('\\n')[0], hasSaveAs: typeof stlApp.saveAs });
+        const doc = JSON.parse(stlApp.docFor('Testname')); stlApp.savedAs('Testname');
+        await new Promise(r => setTimeout(r, 100));
+        return JSON.stringify({ counts, piko: lib.split('\\n')[0], docName: doc.name, title: document.title, window: (window.__winTitle || '') });
         """
         webView.callAsyncJavaScript(test, arguments: [:], in: nil, in: .page) { r in
             switch r {
-            case .success(let v): print("SELFTEST OK", v as? String ?? "\(v)")
+            case .success(let v): print("SELFTEST OK", v as? String ?? "\(v)", "| NSWindow.title:", self.window?.title ?? "-")
             case .failure(let e): print("SELFTEST FAIL", e)
             }
             fflush(stdout); NSApp.terminate(nil)
@@ -259,18 +261,34 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
         decisionHandler(.allow)
     }
 
-    // Downloads (export JSON / parts list CSV) come through the native bridge.
+    // Save panels for the web page: "saveAs" (layout; the chosen file name becomes the layout name)
+    // and "download" (e.g. parts list CSV, content supplied by the page).
     func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard let body = message.body as? [String: Any], body["type"] as? String == "download",
-              let name = body["name"] as? String, let text = body["text"] as? String, let window else { return }
+        guard let body = message.body as? [String: Any], let type = body["type"] as? String,
+              let name = body["name"] as? String, let window else { return }
         let panel = NSSavePanel()
         panel.nameFieldStringValue = name
         panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
         panel.beginSheetModal(for: window) { r in
             guard r == .OK, let url = panel.url else { return }
-            do { try Data(text.utf8).write(to: url, options: .atomic) }
-            catch { NSAlert(error: error).beginSheetModal(for: window) }
+            if type == "download", let text = body["text"] as? String { self.write(text, to: url); return }
+            guard type == "saveAs" else { return }
+            var base = url.lastPathComponent
+            for ext in [".json", ".stl"] where base.lowercased().hasSuffix(ext) { base = String(base.dropLast(ext.count)) }
+            self.webView.callAsyncJavaScript("return stlApp.docFor(n)", arguments: ["n": base], in: nil, in: .page) { res in
+                guard case .success(let v) = res, let text = v as? String else { return }
+                if self.write(text, to: url) {
+                    self.webView.callAsyncJavaScript("stlApp.savedAs(n)", arguments: ["n": base], in: nil, in: .page, completionHandler: nil)
+                }
+            }
         }
+    }
+
+    @discardableResult
+    private func write(_ text: String, to url: URL) -> Bool {
+        do { try Data(text.utf8).write(to: url, options: .atomic); return true }
+        catch { if let window { NSAlert(error: error).beginSheetModal(for: window) }; return false }
     }
 
     // JS dialogs

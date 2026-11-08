@@ -247,3 +247,6 @@ label.inline input { width: 80px; font: inherit; color: var(--text); background:
 .props em { font-style: normal; }
 .props .phint { color: var(--muted); font-size: 11px; margin-top: 2px; }
 @media (max-width: 760px) { .props { top: auto; bottom: 12px; } }
+
+.shape.rect .hitfill { fill: transparent; pointer-events: none; }
+.shape.rect.sel .hitfill { pointer-events: fill; fill: var(--sel); fill-opacity: .05; cursor: move; }

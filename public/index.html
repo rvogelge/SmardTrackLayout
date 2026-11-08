@@ -90,6 +90,15 @@
 
 <div id="toast" class="toast" hidden></div>
 
+<dialog id="dlgName">
+  <form method="dialog">
+    <h2>Save layout as</h2>
+    <input id="saveName" class="wide" placeholder="Layout name" spellcheck="false" maxlength="80">
+    <p class="muted">The file is saved to your downloads as <i>name</i>.stl.json.</p>
+    <menu><button value="cancel" formnovalidate>Cancel</button><button value="ok" class="primary">Save</button></menu>
+  </form>
+</dialog>
+
 <dialog id="dlgText">
   <form method="dialog">
     <h2>Text</h2>
@@ -117,7 +126,7 @@
       <li><b>Mark:</b> click an item; <kbd>Shift</kbd>+click adds or removes. Drag on empty space to mark an area: left→right marks what is completely inside, right→left also what it touches (<kbd>Shift</kbd> adds). Double-click a track piece to mark everything connected. Click empty space or press <kbd>Esc</kbd> to unmark.</li>
       <li><b>Rotate:</b> drag the round handle above the selection (snaps to the angle field; hold <kbd>Shift</kbd> for free rotation), or <kbd>R</kbd> / <kbd>Shift</kbd>+<kbd>R</kbd> by the angle in the toolbar (type any value). <kbd>Ctrl</kbd>+<kbd>A</kbd> then rotate turns the whole design. <b>Delete:</b> <kbd>Del</kbd>.</li>
       <li><b>Draw</b> (toolbar on the canvas): line <kbd>L</kbd>, polyline <kbd>P</kbd>, rectangle <kbd>B</kbd>, circle <kbd>O</kbd>, dimension <kbd>D</kbd>, text <kbd>T</kbd>, back to select <kbd>V</kbd>/<kbd>Esc</kbd>. Points snap to the grid, to corners and to track ends. While drawing, type a length in mm (rectangle: <code>2400x1200</code>) and press <kbd>Enter</kbd>; <kbd>Shift</kbd> locks to 15° steps. Select a single drawing to drag its corner handles; double-click text to edit it.</li>
-      <li><b>Exact values:</b> mark a single drawing and type into the <b>Properties</b> panel (top right; <kbd>Enter</kbd> jumps into it): width/height, length, angle, radius, side lengths, position. Typing a value into a linked dimension resizes the rectangle or line it measures. Rectangles also have edge handles to change only width or height; their dimensions follow.</li>
+      <li><b>Exact values:</b> mark a single drawing and type into the <b>Properties</b> panel (top right; <kbd>Enter</kbd> jumps into it): width/height, length, angle, radius, side lengths, position. Typing a value into a linked dimension resizes the rectangle or line it measures. Rectangles: drag a side line to change only the size in that direction, drag a corner to change both (it stays a rectangle), drag inside a marked rectangle to move it. Their dimensions follow.</li>
       <li><b>Save as…</b> (<kbd>Ctrl</kbd>+<kbd>S</kbd>) writes the layout to a file, <b>Open…</b> (<kbd>Ctrl</kbd>+<kbd>O</kbd>) loads one. Your current work is also kept automatically between sessions.</li>
       <li><b>View:</b> right- or middle-drag (or <kbd>Space</kbd>+drag) to pan, mouse wheel to zoom, <kbd>F</kbd> to fit.</li>
       <li><b>Undo:</b> <kbd>Ctrl</kbd>+<kbd>Z</kbd>, redo <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>. Your work is also autosaved in this browser.</li>
