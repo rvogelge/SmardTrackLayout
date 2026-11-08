@@ -18,13 +18,13 @@ node server.js          # http://localhost:8080
 
 No dependencies are required (Node ≥ 20).
 
-## Deploy (Raspberry Pi)
+## Deploy (Docker on Raspberry Pi)
 
 ```sh
-./deploy.sh             # rsync to pi@192.168.178.74 and docker compose up -d --build
+./deploy.sh             # rsync to pi@docker.host and docker compose up -d --build
 ```
 
-The app runs at `http://192.168.178.74:8080/`. Saved layouts and cached library files live in the `stl-data` Docker volume.
+The app runs at `http://docker.host:8080/`. Saved layouts and cached library files live in the `stl-data` Docker volume.
 
 ## macOS desktop app
 
