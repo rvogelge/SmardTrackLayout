@@ -241,9 +241,12 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
         for (const pn of ['24130','24130','24130','24130','24130','24130','24188','24130','24130','24130','24130','24130','24130','24188']) await click(pn);
         const counts = document.querySelector('#stCounts').textContent;
         const lib = await (await fetch('api/library?file=' + encodeURIComponent('HO-Piko-A.xtp'))).text();
-        const doc = JSON.parse(stlApp.docFor('Testname')); stlApp.savedAs('Testname');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', metaKey: true, bubbles: true }));
+        stlApp.copy(); await stlApp.paste();
+        const afterPaste = document.querySelector('#stCounts').textContent;
+                const doc = JSON.parse(stlApp.docFor('Testname')); stlApp.savedAs('Testname');
         await new Promise(r => setTimeout(r, 100));
-        return JSON.stringify({ counts, piko: lib.split('\\n')[0], docName: doc.name, title: document.title, window: (window.__winTitle || '') });
+        return JSON.stringify({ counts, afterPaste, piko: lib.split('\\n')[0], docName: doc.name, title: document.title, window: (window.__winTitle || '') });
         """
         let testFile = ProcessInfo.processInfo.environment["STL_SELFTEST_FILE"].map { URL(fileURLWithPath: $0) }
         currentURL = testFile  // pretend this layout was opened from that file, so "Save" writes there
@@ -422,6 +425,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"),
             NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"),
             NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"),
+            item("Duplicate", "stlApp.duplicate()", "d"),
         ])
         _ = sub("Arrange", [
             item("Rotate Clockwise", "stlApp.rotate()", "r", [.command, .option]),

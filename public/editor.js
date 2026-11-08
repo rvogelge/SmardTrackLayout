@@ -840,8 +840,16 @@ function propFields(s) {
 }
 
 const PROP_TITLES = { line: 'Line', circle: 'Circle', dim: 'Dimension', text: 'Text', poly: 'Polyline' };
+// the rectangle the size panel works on: a single marked rectangle, also when its own dimensions are marked with it
+function panelRect() {
+  if (S.tool !== 'select' || !S.sel.size) return null;
+  const items = selectedItems(), rects = items.filter(isRect);
+  if (rects.length !== 1) return null;
+  const r = rects[0];
+  return items.every((it) => it === r || (it.type === 'dim' && it.ref?.shape === r.id)) ? r : null;
+}
 function renderProps() {
-  const s = S.tool === 'select' && S.sel.size === 1 ? shapeById([...S.sel][0]) : null;
+  const s = panelRect();
   if (s && !isRect(s)) { propsEl.hidden = true; propsKey = ''; return; }
   if (!s) { propsEl.hidden = true; propsKey = ''; return; }
   const fields = propFields(s);
@@ -859,7 +867,7 @@ function renderProps() {
 }
 
 function applyProp(k, raw) {
-  const s = shapeById([...S.sel][0]); if (!s) return;
+  const s = panelRect(); if (!s) return;
   const f = propFields(s).find((x) => x.key === k); if (!f) return;
   let v = raw;
   if (!f.text) {
@@ -992,6 +1000,7 @@ function restoreItems(orig) {
 svg.addEventListener('pointermove', (ev) => {
   const [wx, wy] = toWorldPt(ev.clientX, ev.clientY);
   $('#stCoords').textContent = `x ${mm(wx)} mm · y ${mm(wy)} mm`;
+  S.mouse = { sx: ev.clientX, sy: ev.clientY, wx, wy, inside: true };
   const D = S.drag;
   if (!D) {
     if (S.tool === 'select') { // resize cursors over rectangle sides and corners
@@ -1149,6 +1158,76 @@ function fitView() {
   applyView();
 }
 
+// ---------------------------------------------------------------- clipboard (copy / cut / paste / duplicate)
+// Kept in memory and in localStorage, so it also works between tabs/windows of the editor.
+let pasteCount = 0, copyMouse = null;
+svg.addEventListener('pointerleave', () => { if (S.mouse) S.mouse.inside = false; });
+
+function clipData(items) {
+  const ids = new Set(items.map((it) => it.id));
+  for (const d of S.shapes) if (d.ref && ids.has(d.ref.shape)) ids.add(d.id); // linked dimensions come along
+  return {
+    format: 'smardtracklayout-clipboard', version: 1,
+    parts: S.parts.filter((p) => ids.has(p.id)).map(({ id, lib, title, x, y, rot }) => ({ id, lib, title, x, y, rot })),
+    shapes: clone(S.shapes.filter((x) => ids.has(x.id))),
+  };
+}
+function copySelection({ quiet = false } = {}) {
+  const items = selectedItems(); if (!items.length) return false;
+  const data = clipData(items), text = JSON.stringify(data);
+  S.clip = text;
+  try { localStorage.setItem('stl.clip', text); } catch { /* ignore */ }
+  pasteCount = 0; copyMouse = S.mouse ? { ...S.mouse } : null;
+  if (!quiet) toast(`Copied ${data.parts.length + data.shapes.length} item(s)`);
+  return true;
+}
+function cutSelection() { if (copySelection({ quiet: true })) { const n = S.sel.size; deleteSelection(); toast(`Cut ${n} item(s)`); return true; } return false; }
+function readClip() {
+  let text = null;
+  try { text = localStorage.getItem('stl.clip'); } catch { /* ignore */ }
+  text = text || S.clip;
+  try { const d = JSON.parse(text); return d?.format === 'smardtracklayout-clipboard' ? d : null; } catch { return null; }
+}
+const hasClip = () => !!readClip();
+
+async function pasteClip({ atCursor = true, data = readClip() } = {}) {
+  if (!data) return false;
+  await Promise.all([...new Set(data.parts.map((p) => p.lib))].map((f) => loadLib(f).catch(() => null)));
+  pushUndo();
+  const idMap = new Map(), added = [];
+  for (const p of data.parts) { const n = { id: S.nextId++, lib: p.lib, title: p.title, x: p.x, y: p.y, rot: p.rot }; idMap.set(p.id, n.id); S.parts.push(n); added.push(n); }
+  for (const sh of data.shapes) { const n = { ...clone(sh), id: S.nextId++ }; idMap.set(sh.id, n.id); S.shapes.push(n); added.push(n); }
+  for (const n of added) if (n.ref) { const id = idMap.get(n.ref.shape); if (id) n.ref = { ...n.ref, shape: id }; else delete n.ref; }
+  // where: at the mouse pointer if it moved since copying, otherwise a little offset (cascading)
+  const b = unionBBox(added), cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
+  const moved = S.mouse?.inside && (!copyMouse || Math.hypot(S.mouse.sx - copyMouse.sx, S.mouse.sy - copyMouse.sy) > 30);
+  let dx, dy;
+  if (atCursor && moved) { const g = S.grid > 0 ? S.grid / MM : 0; dx = S.mouse.wx - cx; dy = S.mouse.wy - cy; if (g) { dx = Math.round(dx / g) * g; dy = Math.round(dy / g) * g; } }
+  else { pasteCount++; dx = (20 / MM) * pasteCount; dy = (-20 / MM) * pasteCount; }
+  for (const it of added) translateItem(it, dx, dy);
+  if (atCursor && moved) { copyMouse = { ...S.mouse }; pasteCount = 0; }
+  setTool('select');
+  S.sel = new Set(added.map((it) => it.id)); S.lastPlace = null;
+  renderAll();
+  return true;
+}
+function duplicateSelection() {
+  const items = selectedItems(); if (!items.length) return false;
+  pasteClip({ atCursor: false, data: JSON.parse(JSON.stringify(clipData(items))) });
+  return true;
+}
+
+// menu commands (macOS app Edit menu, browser Edit menu) arrive as DOM clipboard events
+const editingText = () => document.activeElement?.matches?.('input, textarea, [contenteditable]');
+document.addEventListener('copy', (ev) => { if (!editingText() && copySelection()) ev.preventDefault(); });
+document.addEventListener('cut', (ev) => { if (!editingText() && cutSelection()) ev.preventDefault(); });
+document.addEventListener('paste', (ev) => {
+  if (editingText()) return;
+  let data = null;
+  try { const d = JSON.parse(ev.clipboardData?.getData('text/plain') || ''); if (d?.format === 'smardtracklayout-clipboard') data = d; } catch { /* not ours */ }
+  if (data || hasClip()) { ev.preventDefault(); pasteClip(data ? { data } : {}); }
+});
+
 // ---------------------------------------------------------------- keyboard
 const TOOL_KEYS = { v: 'select', l: 'line', p: 'poly', b: 'rect', o: 'circle', d: 'dim', t: 'text' };
 document.addEventListener('keydown', (ev) => {
@@ -1168,6 +1247,12 @@ document.addEventListener('keydown', (ev) => {
   if (mod && k === 'o') { ev.preventDefault(); openFile(); return; }
   if (!mod && k === 'enter' && S.tool === 'select') {
     const f = $('#props:not([hidden]) input'); if (f) { ev.preventDefault(); f.focus(); f.select(); return; }
+  }
+  if (mod && !ev.shiftKey && !ev.altKey) {
+    if (k === 'c' && copySelection()) { ev.preventDefault(); return; }
+    if (k === 'x' && cutSelection()) { ev.preventDefault(); return; }
+    if (k === 'v' && hasClip()) { ev.preventDefault(); pasteClip(); return; }
+    if (k === 'd') { ev.preventDefault(); duplicateSelection(); return; }
   }
   if (mod && k === 'a') { ev.preventDefault(); setTool('select'); S.sel = new Set([...S.parts, ...S.shapes].map((it) => it.id)); renderSelection(); renderUI(); updateStatus(); return; }
   if (mod) return;
@@ -1382,6 +1467,7 @@ window.stlApp = {
   rotate: (d) => rotateSelection(d ?? step()),
   fit: fitView, partsList: showBom, help: () => $('#dlgHelp').showModal(),
   toggleLabels: () => $('#chkLabels').click(), tool: setTool,
+  copy: () => copySelection(), cut: () => cutSelection(), paste: () => pasteClip(), duplicate: () => duplicateSelection(),
 };
 
 // ---------------------------------------------------------------- startup
