@@ -371,7 +371,7 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
         await new Promise(r => setTimeout(r, 300));
         const buildText = document.getElementById('buildInfo').textContent;
         document.getElementById('dlgSettings').close('ok'); await new Promise(r => setTimeout(r, 100));
-        const de = [document.getElementById('btnSave').textContent, document.querySelector('#emptyHint strong').textContent, document.getElementById('stCounts').textContent, document.querySelector('#dlgHelp li').textContent.slice(0, 30)].join(' | ');
+        const de = [document.getElementById('btnSave').getAttribute('aria-label'), document.querySelector('#emptyHint strong').textContent, document.getElementById('stCounts').textContent, document.querySelector('#dlgHelp li').textContent.slice(0, 30)].join(' | ');
         return JSON.stringify({ legal, counts, afterPaste, piko: lib.split('\\n')[0], docName: doc.name, title: document.title, build, langOpts, libOpts, buildText, de, settings: localStorage.getItem('stl.settings'), nativeInfo: window.__stlNative });
         """
         let testFile = ProcessInfo.processInfo.environment["STL_SELFTEST_FILE"].map { URL(fileURLWithPath: $0) }

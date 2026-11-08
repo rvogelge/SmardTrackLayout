@@ -12,11 +12,12 @@
 <header class="toolbar">
   <div class="brand"><img src="favicon.svg" alt=""><span>SmardTrackLayout</span></div>
   <div class="tgroup">
-    <input id="layoutName" class="name" value="Untitled" data-i18n-title="name.title" title="Layout name" spellcheck="false">
-    <button id="btnNew" data-i18n="new" data-i18n-title="new.title">New</button>
-    <button id="btnOpen" data-i18n="open" data-i18n-title="open.title">Open…</button>
-    <button id="btnSave" data-i18n="save" data-i18n-title="save.title">Save</button>
-    <button id="btnSaveAs" data-i18n="saveAs" data-i18n-title="saveAs.title">Save as…</button>
+    <!-- the layout name is shown in the window / tab title; Save as… sets it from the file name -->
+    <input id="layoutName" value="Untitled" hidden>
+    <button id="btnNew" class="icon" data-i18n-title="new.title" data-i18n-aria="new" aria-label="New"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 2.5h6.5L15 6v11.5H5z M11.5 2.5V6H15 M10 9v6 M7 12h6"/></svg></button>
+    <button id="btnOpen" class="icon" data-i18n-title="open.title" data-i18n-aria="open" aria-label="Open…"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 15.5V4.5h5l1.5 2H15V9 M2.5 15.5L5 9h13l-2.5 6.5z"/></svg></button>
+    <button id="btnSave" class="icon" data-i18n-title="save.title" data-i18n-aria="save" aria-label="Save"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 3.5h10l3 3v10h-13z M6.5 3.5v4h6v-4 M6 16.5v-5h8v5"/></svg></button>
+    <button id="btnSaveAs" class="icon" data-i18n-title="saveAs.title" data-i18n-aria="saveAs" aria-label="Save as…"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M9 16.5H3.5v-13h9l2.5 2.5V8 M6 3.5v3.5h5.5V3.5 M11 17.5l.6-2.6 5-5 2 2-5 5z"/></svg></button>
     <input id="fileImport" type="file" accept=".json,application/json" hidden>
   </div>
   <div class="tgroup">
