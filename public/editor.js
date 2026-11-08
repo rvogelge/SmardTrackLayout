@@ -1499,7 +1499,7 @@ let autosaveTimer;
 function scheduleAutosave() {
   clearTimeout(autosaveTimer);
   autosaveTimer = setTimeout(() => {
-    try { localStorage.setItem('stl.autosave', JSON.stringify({ ...layoutDoc(), view: S.view, dirty: S.dirty })); } catch { /* ignore */ }
+    try { localStorage.setItem('stl.autosave', JSON.stringify({ ...layoutDoc(), view: S.view, dirty: S.dirty, hasFile })); } catch { /* ignore */ }
   }, 400);
 }
 
@@ -1508,7 +1508,19 @@ function scheduleAutosave() {
 const baseName = (f) => String(f).split(/[\\/]/).pop().replace(/\.json$/i, '').replace(/\.stl$/i, '');
 const FILE_TYPES = [{ description: 'SmardTrackLayout layout', accept: { 'application/json': ['.json'] } }];
 let fileHandle = null;   // browser: handle of the current file (when supported)
-let hasFile = false;     // a current file exists (browser handle or file known to the macOS app)
+let hasFile = false;     // a current file exists (browser handle, file known to the macOS app, or a downloaded name)
+// The file link survives reloads/restarts together with the autosave: the browser keeps the handle in
+// IndexedDB (Chrome/Edge), the macOS app keeps the path itself.
+const fsApi = !native && !!window.showSaveFilePicker;
+function setFileHandle(h) {
+  fileHandle = h;
+  if (fsApi) idb('readwrite', (st) => (h ? st.put(h, 'currentFile') : st.delete('currentFile'))).catch(() => {});
+}
+async function writable(h) { // after a reload the browser asks once more for permission to write the file
+  if (!h.queryPermission) return true;
+  if ((await h.queryPermission({ mode: 'readwrite' })) === 'granted') return true;
+  return (await h.requestPermission({ mode: 'readwrite' })) === 'granted';
+}
 
 function docFor(name) { $('#layoutName').value = name; return JSON.stringify(layoutDoc(), null, 1); }
 function savedAs(name) { $('#layoutName').value = name; hasFile = true; S.dirty = false; updateStatus(); toast(tr('saved', { n: name })); }
@@ -1518,8 +1530,13 @@ async function openText(text, name) { // used by the macOS app after its open pa
 
 async function save() {
   if (native) { native.postMessage({ type: 'save', name: layoutName() + '.stl.json' }); return; } // app: same file, or save panel
-  if (!fileHandle) return saveAs();
+  if (!fileHandle) {
+    // browsers that can only download: once the layout has a name, Save downloads again under it, without asking
+    if (!fsApi && hasFile) { const n = layoutName(); download(n + '.stl.json', docFor(n), 'application/json'); savedAs(n); return; }
+    return saveAs();
+  }
   try {
+    if (!(await writable(fileHandle))) return saveAs();
     const w = await fileHandle.createWritable();
     await w.write(docFor(layoutName())); await w.close();
     savedAs(layoutName());
@@ -1534,7 +1551,7 @@ async function saveAs() {
       const h = await window.showSaveFilePicker({ suggestedName: name + '.stl.json', types: FILE_TYPES, startIn: startIn() });
       const n = baseName(h.name), w = await h.createWritable();
       await w.write(docFor(n)); await w.close();
-      fileHandle = h; savedAs(n);
+      setFileHandle(h); savedAs(n);
     } catch (e) { if (e.name !== 'AbortError') toast(tr('saveFailed', { e: e.message }), 5000); }
     return;
   }
@@ -1547,7 +1564,7 @@ async function saveAs() {
     const n = input.value.trim();
     if (dlg.returnValue !== 'ok' || !n) return;
     download(n + '.stl.json', docFor(n), 'application/json');
-    savedAs(n); hasFile = false;
+    savedAs(n);
   };
 }
 
@@ -1559,7 +1576,7 @@ async function openFile() {
       const [h] = await window.showOpenFilePicker({ types: FILE_TYPES, startIn: startIn() });
       const f = await h.getFile();
       await loadDoc(JSON.parse(await f.text()));
-      fileHandle = h; hasFile = true;
+      setFileHandle(h); hasFile = true;
       $('#layoutName').value = baseName(f.name); S.dirty = false; updateStatus();
     } catch (e) { if (e.name !== 'AbortError') toast(tr('openFailed', { e: e.message }), 5000); }
     return;
@@ -1594,7 +1611,7 @@ function showBom() {
 
 function newLayout() {
   if (S.dirty && S.parts.length + S.shapes.length && !confirm(tr('confirmNew'))) return;
-  fileHandle = null; hasFile = false; native?.postMessage({ type: 'new' });
+  setFileHandle(null); hasFile = false; native?.postMessage({ type: 'new' });
   if (settings.defaultLib !== S.lib && S.libList.includes(settings.defaultLib)) selectLib(settings.defaultLib);
   loadDoc({ name: tr('untitled'), parts: [], shapes: [] }).then(() => { S.dirty = false; updateStatus(); });
 }
@@ -1740,7 +1757,7 @@ $('#btnOpen').onclick = openFile;
 $('#btnNew').onclick = newLayout;
 $('#fileImport').onchange = async (e) => {
   const f = e.target.files[0]; if (!f) return;
-  try { await loadDoc(JSON.parse(await f.text())); fileHandle = null; hasFile = false; $('#layoutName').value = baseName(f.name); S.dirty = false; updateStatus(); } catch (err) { toast(tr('openFailed', { e: err.message }), 5000); }
+  try { await loadDoc(JSON.parse(await f.text())); setFileHandle(null); hasFile = true; $('#layoutName').value = baseName(f.name); S.dirty = false; updateStatus(); } catch (err) { toast(tr('openFailed', { e: err.message }), 5000); }
   e.target.value = '';
 };
 $('#layoutName').addEventListener('change', () => { S.dirty = true; updateStatus(); });
@@ -1784,6 +1801,12 @@ window.stlApp = {
     await loadDoc(saved, { keepView: !!saved.view }).catch(() => {});
     S.dirty = !!saved.dirty;
     if (saved.view) { S.view = saved.view; applyView(); }
+    // reconnect to the file the restored work belongs to, so Save writes there again
+    if (saved.hasFile) {
+      if (fsApi) { const h = await idb('readonly', (st) => st.get('currentFile')).catch(() => null); if (h) { fileHandle = h; hasFile = true; } }
+      else hasFile = true;
+    }
   }
+  native?.postMessage({ type: 'restore', hasFile: !!(resume && saved.hasFile) });
   updateStatus();
 })();

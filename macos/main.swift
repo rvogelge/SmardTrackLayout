@@ -28,10 +28,12 @@ struct APIError: Error { let status: Int; let message: String }
 /// WebKit storage; the app mirrors the language for its menus and owns the data folder.
 enum Prefs {
     static let selftest = ProcessInfo.processInfo.environment["STL_SELFTEST"] != nil
+    /// STL_SELFTEST_PHASE=save, then =restart: checks that Save still writes to the same file after a restart
+    static let selftestPhase = ProcessInfo.processInfo.environment["STL_SELFTEST_PHASE"]
     /// the self-test must not change the user's preferences
     static let d: UserDefaults = {
         guard selftest, let t = UserDefaults(suiteName: "com.github.rvogelge.smardtracklayout.selftest") else { return .standard }
-        t.removePersistentDomain(forName: "com.github.rvogelge.smardtracklayout.selftest")
+        if selftestPhase != "restart" { t.removePersistentDomain(forName: "com.github.rvogelge.smardtracklayout.selftest") }
         return t
     }()
     static let languages = ["en", "de", "fr", "it", "es"]
@@ -51,6 +53,11 @@ enum Prefs {
         set { if let u = newValue { d.set(u.path, forKey: "dataDir") } else { d.removeObject(forKey: "dataDir") } }
     }
     static var dataDir: URL { customDataDir ?? documents }
+    /// the file the current layout belongs to, so Save keeps writing there after a restart
+    static var currentFile: URL? {
+        get { d.string(forKey: "currentFile").map { URL(fileURLWithPath: $0) }.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil } }
+        set { if let u = newValue { d.set(u.path, forKey: "currentFile") } else { d.removeObject(forKey: "currentFile") } }
+    }
 }
 
 /// menu / dialog texts: English key → [de, fr, it, es]
@@ -304,7 +311,12 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
         let cfg = WKWebViewConfiguration()
         cfg.setURLSchemeHandler(SchemeHandler(store: store), forURLScheme: scheme)
         // the self-test must never touch the user's autosaved work
-        if ProcessInfo.processInfo.environment["STL_SELFTEST"] != nil { cfg.websiteDataStore = .nonPersistent() }
+        if Prefs.selftest {
+            // phases need storage that survives a restart, but separate from the user's
+            if Prefs.selftestPhase != nil, #available(macOS 14.0, *) {
+                cfg.websiteDataStore = WKWebsiteDataStore(forIdentifier: UUID(uuidString: "5F0C2A9E-6B1D-4C61-9E0F-2A7B3C4D5E6F")!)
+            } else { cfg.websiteDataStore = .nonPersistent() }
+        }
         let ucc = WKUserContentController()
         ucc.addUserScript(WKUserScript(source: Self.nativeInfoScript(), injectionTime: .atDocumentStart, forMainFrameOnly: true))
         cfg.userContentController = ucc
@@ -326,6 +338,8 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
         titleObservation = webView.observe(\.title, options: [.new]) { [weak win] wv, _ in
             if let t = wv.title, !t.isEmpty { win?.title = t }
         }
+        // the page confirms with a "restore" message whether its autosaved work still belongs to this file
+        currentURL = Prefs.currentFile; win.representedURL = currentURL
         webView.load(URLRequest(url: URL(string: "\(scheme)://app/index.html")!))
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -350,6 +364,7 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
     // STL_SELFTEST=1: run a scripted smoke test in the real web view, print the result and quit.
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard ProcessInfo.processInfo.environment["STL_SELFTEST"] != nil else { return }
+        if Prefs.selftestPhase == "restart" { return restartTest() }
         let test = """
         await new Promise(r => { const t = setInterval(() => { if (document.querySelector('.pitem')) { clearInterval(t); r(); } }, 100); });
         localStorage.clear();
@@ -375,8 +390,8 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
         return JSON.stringify({ legal, counts, afterPaste, piko: lib.split('\\n')[0], docName: doc.name, title: document.title, build, langOpts, libOpts, buildText, de, settings: localStorage.getItem('stl.settings'), nativeInfo: window.__stlNative });
         """
         let testFile = ProcessInfo.processInfo.environment["STL_SELFTEST_FILE"].map { URL(fileURLWithPath: $0) }
-        currentURL = testFile  // pretend this layout was opened from that file, so "Save" writes there
         webView.callAsyncJavaScript(test, arguments: [:], in: nil, in: .page) { r in
+            if let testFile { self.currentURL = testFile }  // pretend the layout was opened from that file, so "Save" writes there
             switch r {
             case .success(let v): print("SELFTEST OK", v as? String ?? "\(v)", "| NSWindow.title:", self.window?.title ?? "-")
             case .failure(let e): print("SELFTEST FAIL", e)
@@ -384,6 +399,7 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
             guard let testFile else { fflush(stdout); NSApp.terminate(nil); return }
             webView.evaluateJavaScript("stlApp.save()", completionHandler: nil)
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                if Prefs.selftestPhase == "save" { print("SELFTEST PHASE save done, file:", Prefs.currentFile?.path ?? "-"); fflush(stdout); NSApp.terminate(nil); return }
                 let saved = (try? String(contentsOf: testFile, encoding: .utf8)) ?? ""
                 let doc = (try? JSONSerialization.jsonObject(with: Data(saved.utf8))) as? [String: Any]
                 print("SELFTEST SAVE", doc == nil ? "FAIL (nothing written)" : "OK name=\(doc!["name"] ?? "-") parts=\((doc!["parts"] as? [Any])?.count ?? -1) title=\(self.window?.title ?? "-")")
@@ -395,6 +411,21 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
                         print("SELFTEST NEW", v ?? "-"); fflush(stdout); NSApp.terminate(nil)
                     }
                 }
+            }
+        }
+    }
+
+    /// second launch: the autosaved layout must still be linked to its file, so Save writes without a panel
+    private func restartTest() {
+        let wait = "await new Promise(r => { const t = setInterval(() => { if (window.__stl && __stl.parts.length) { clearInterval(t); r(); } }, 100); }); await new Promise(r => setTimeout(r, 500)); return __stl.parts.length;"
+        webView.callAsyncJavaScript(wait, arguments: [:], in: nil, in: .page) { r in
+            let file = self.currentURL
+            let before = file.flatMap { try? FileManager.default.attributesOfItem(atPath: $0.path)[.modificationDate] as? Date }
+            self.webView.evaluateJavaScript("window.__stl.dirty = true; stlApp.save()", completionHandler: nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                let after = file.flatMap { try? FileManager.default.attributesOfItem(atPath: $0.path)[.modificationDate] as? Date }
+                print("SELFTEST RESTART parts=\((try? r.get()) ?? "-") file=\(file?.lastPathComponent ?? "none") panel=\(self.window?.attachedSheet != nil) rewritten=\(before != nil && after != nil && after! > before!) title=\(self.window?.title ?? "-")")
+                fflush(stdout); NSApp.terminate(nil)
             }
         }
     }
@@ -411,7 +442,9 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
     // and "download" (e.g. parts list CSV, content supplied by the page).
     // File handling for the web page. The app remembers the current file, so "save" writes back
     // to it; "saveAs" / "open" use the standard panels; "download" saves page-supplied content (CSV).
-    private var currentURL: URL?
+    private var currentURL: URL? {
+        didSet { Prefs.currentFile = currentURL; window?.representedURL = currentURL }
+    }
 
     private static func layoutBase(_ url: URL) -> String {
         var base = url.lastPathComponent
@@ -437,6 +470,9 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
         switch type {
         case "new":
             currentURL = nil; window.representedURL = nil
+            return
+        case "restore":
+            if (body["hasFile"] as? Bool) != true { currentURL = nil }
             return
         case "settings":
             if let l = body["lang"] as? String { Prefs.langPref = l; onLanguageChange?() }
