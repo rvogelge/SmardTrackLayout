@@ -3,3 +3,6 @@ data
 node_modules
 deploy.sh
 *.md
+build
+dist
+macos

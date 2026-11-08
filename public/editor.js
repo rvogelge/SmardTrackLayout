@@ -486,6 +486,7 @@ document.addEventListener('keydown', (ev) => {
   if (mod && k === 'z') { ev.preventDefault(); ev.shiftKey ? redo() : undo(); return; }
   if (mod && k === 'y') { ev.preventDefault(); redo(); return; }
   if (mod && k === 's') { ev.preventDefault(); saveServer(); return; }
+  if (mod && k === 'o') { ev.preventDefault(); openDialog(); return; }
   if (mod && k === 'a') { ev.preventDefault(); S.sel = new Set(S.parts.map((p) => p.id)); renderSelection(); updateStatus(); return; }
   if (mod) return;
   if (k === 'delete' || k === 'backspace') { ev.preventDefault(); deleteSelection(); }
@@ -528,10 +529,14 @@ function scheduleAutosave() {
   }, 400);
 }
 
+// Running inside the macOS app (WKWebView with a native bridge)?
+const native = window.webkit?.messageHandlers?.stl;
+const WHERE = native ? '' : ' on the server';
+
 async function saveServer() {
   const doc = layoutDoc();
   const res = await fetch('api/layouts/' + encodeURIComponent(doc.name), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(doc) });
-  if (res.ok) toast(`Saved “${doc.name}” on the server`);
+  if (res.ok) toast(`Saved “${doc.name}”${WHERE}`);
   else toast('Save failed: ' + ((await res.json().catch(() => ({}))).error || res.statusText), 5000);
 }
 
@@ -539,7 +544,7 @@ async function openDialog() {
   const list = $('#openList'); list.innerHTML = '<div class="muted">Loading…</div>';
   $('#dlgOpen').showModal();
   const items = await fetch('api/layouts').then((r) => r.json()).catch(() => []);
-  if (!items.length) { list.innerHTML = '<div class="muted">No layouts saved on the server yet.</div>'; return; }
+  if (!items.length) { list.innerHTML = `<div class="muted">No layouts saved${WHERE} yet.</div>`; return; }
   list.innerHTML = '';
   for (const it of items) {
     const row = document.createElement('div'); row.className = 'openrow';
@@ -549,7 +554,7 @@ async function openDialog() {
       $('#dlgOpen').close(); await loadDoc(doc).catch((e) => toast(e.message));
     };
     row.querySelector('.del').onclick = async () => {
-      if (!confirm(`Delete layout “${it.name}” from the server?`)) return;
+      if (!confirm(`Delete layout “${it.name}”${WHERE ? ' from the server' : ''}?`)) return;
       await fetch('api/layouts/' + encodeURIComponent(it.name), { method: 'DELETE' }); row.remove();
     };
     list.append(row);
@@ -557,6 +562,7 @@ async function openDialog() {
 }
 
 function download(name, text, type) {
+  if (native) { native.postMessage({ type: 'download', name, text }); return; }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
@@ -608,6 +614,17 @@ $('#fileImport').onchange = async (e) => {
 };
 $('#layoutName').addEventListener('change', scheduleAutosave);
 window.addEventListener('resize', applyView);
+
+// API for the macOS app menus
+const inField = () => document.activeElement?.matches?.('input, textarea');
+window.stlApp = {
+  newLayout: () => $('#btnNew').click(), open: openDialog, save: saveServer,
+  exportJson: () => $('#btnExport').click(), importJson: () => $('#btnImport').click(),
+  undo: () => (inField() ? document.execCommand('undo') : undo()),
+  redo: () => (inField() ? document.execCommand('redo') : redo()),
+  fit: fitView, partsList: showBom, help: () => $('#dlgHelp').showModal(),
+  toggleLabels: () => $('#chkLabels').click(),
+};
 
 // ---------------------------------------------------------------- startup
 (async function init() {
