@@ -15,8 +15,9 @@
     <button id="btnNew" title="New layout">New</button>
     <button id="btnOpen" title="Open a saved layout (Ctrl+O)">Open</button>
     <button id="btnSave" class="primary" title="Save layout (Ctrl+S)">Save</button>
-    <button id="btnExport" title="Download layout as JSON">Export</button>
-    <button id="btnImport" title="Load layout from a JSON file">Import</button>
+    <button id="btnSaveAs" title="Save under a new name (Ctrl+Shift+S)">Save as…</button>
+    <button id="btnExport" title="Save the layout to a JSON file on this computer">Save to file…</button>
+    <button id="btnImport" title="Open a layout JSON file from this computer">Open file…</button>
     <input id="fileImport" type="file" accept=".json,application/json" hidden>
   </div>
   <div class="tgroup">
@@ -24,12 +25,10 @@
     <button id="btnRedo" title="Redo (Ctrl+Shift+Z)">↷</button>
   </div>
   <div class="tgroup">
-    <button id="btnRotL" title="Rotate counter-clockwise (Shift+R)">⟲</button>
-    <select id="rotStep" title="Rotation step">
-      <option value="1">1°</option><option value="7.5">7.5°</option><option value="15" selected>15°</option>
-      <option value="30">30°</option><option value="45">45°</option><option value="90">90°</option>
-    </select>
-    <button id="btnRotR" title="Rotate clockwise (R)">⟳</button>
+    <button id="btnRotL" title="Rotate counter-clockwise (Shift+R)">↺</button>
+    <label class="angle" title="Rotation angle / step in degrees (type any value)"><input id="rotStep" list="rotSteps" value="15" inputmode="decimal" spellcheck="false">°</label>
+    <datalist id="rotSteps"><option value="1"><option value="5"><option value="7.5"><option value="15"><option value="22.5"><option value="30"><option value="45"><option value="90"><option value="180"></datalist>
+    <button id="btnRotR" title="Rotate clockwise (R)">↻</button>
     <button id="btnFlip" title="Attach the last placed piece by its next endpoint (Tab)">Flip end</button>
     <button id="btnDelete" title="Delete selection (Del)">Delete</button>
   </div>
@@ -54,15 +53,33 @@
 <main class="stage">
   <svg id="canvas" xmlns="http://www.w3.org/2000/svg">
     <g id="world">
+      <g id="shapes"></g>
       <g id="parts"></g>
+      <g id="anno"></g>
       <g id="overlay"></g>
     </g>
+    <g id="ui"></g>
     <rect id="boxSel" class="boxsel" hidden></rect>
   </svg>
+  <div class="drawbar" role="toolbar" aria-label="Drawing tools">
+    <button data-tool="select" class="on" title="Select / move (V)"><svg viewBox="0 0 20 20"><path d="M5 3l10 7-4.5 1 2.5 5-2 1-2.5-5L5 15z"/></svg></button>
+    <button data-tool="line" title="Line (L)"><svg viewBox="0 0 20 20"><path d="M4 16L16 4"/><circle cx="4" cy="16" r="1.6"/><circle cx="16" cy="4" r="1.6"/></svg></button>
+    <button data-tool="poly" title="Polyline / outline (P)"><svg viewBox="0 0 20 20"><path d="M3 16V8l6-4 8 3v9z"/></svg></button>
+    <button data-tool="rect" title="Rectangle, e.g. baseboard (B)"><svg viewBox="0 0 20 20"><rect x="3" y="5" width="14" height="10"/></svg></button>
+    <button data-tool="circle" title="Circle (O)"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="6.5"/></svg></button>
+    <button data-tool="dim" title="Dimension (D)"><svg viewBox="0 0 20 20"><path d="M3 6v9M17 6v9M3 10.5h14M3 10.5l3-2v4zM17 10.5l-3-2v4z"/></svg></button>
+    <button data-tool="text" title="Text (T)"><svg viewBox="0 0 20 20"><path d="M4 5h12M10 5v11"/></svg></button>
+    <span class="sep"></span>
+    <label title="Snap drawing to a grid">Grid
+      <select id="gridSnap"><option value="0">off</option><option value="1">1 mm</option><option value="5">5 mm</option><option value="10" selected>10 mm</option><option value="50">50 mm</option><option value="100">100 mm</option></select>
+    </label>
+    <label title="Add width/height dimensions to new rectangles"><input id="chkAutoDim" type="checkbox" checked> Auto-dimension</label>
+  </div>
+  <div id="measure" class="measure" hidden></div>
   <div id="emptyHint" class="emptyhint">
     <strong>Pick a piece from the library</strong>
     Click to place it. The next piece connects to the highlighted open end.<br>
-    Drag pieces near an open end to snap them together.
+    Drag pieces near an open end to snap them together.<br>Use the drawing tools (top left) for baseboard outlines and dimensions.
   </div>
 </main>
 
@@ -83,6 +100,24 @@
   </form>
 </dialog>
 
+<dialog id="dlgSaveAs">
+  <form method="dialog">
+    <h2>Save layout as</h2>
+    <input id="saveAsName" class="wide" placeholder="Layout name" spellcheck="false" maxlength="64">
+    <div id="saveAsList" class="chips"></div>
+    <menu><button value="cancel" formnovalidate>Cancel</button><button value="ok" class="primary">Save</button></menu>
+  </form>
+</dialog>
+
+<dialog id="dlgText">
+  <form method="dialog">
+    <h2>Text</h2>
+    <input id="textValue" class="wide" placeholder="e.g. Bahnhof Neustadt" spellcheck="false">
+    <label class="inline">Height <input id="textSize" type="number" min="1" step="1" value="40"> mm</label>
+    <menu><button value="cancel" formnovalidate>Cancel</button><button value="ok" class="primary">OK</button></menu>
+  </form>
+</dialog>
+
 <dialog id="dlgBom">
   <form method="dialog">
     <h2>Parts list</h2>
@@ -99,7 +134,9 @@
       <li><b>Flip end</b> (<kbd>Tab</kbd>): attach the last placed piece by its other endpoint, e.g. to make a curve bend right instead of left.</li>
       <li><b>Connect:</b> drag a piece close to an open end and it snaps on. Open ends are orange; the active one (where the next piece goes) is larger and blue. Click an open end to make it active.</li>
       <li><b>Select:</b> click a piece; <kbd>Shift</kbd>+click adds to the selection; double-click selects everything connected; <kbd>Shift</kbd>+drag on empty space draws a selection box.</li>
-      <li><b>Rotate:</b> <kbd>R</kbd> / <kbd>Shift</kbd>+<kbd>R</kbd> by the chosen step. <b>Delete:</b> <kbd>Del</kbd>.</li>
+      <li><b>Rotate:</b> drag the round handle above the selection (snaps to the angle field; hold <kbd>Shift</kbd> for free rotation), or <kbd>R</kbd> / <kbd>Shift</kbd>+<kbd>R</kbd> by the angle in the toolbar (type any value). <kbd>Ctrl</kbd>+<kbd>A</kbd> then rotate turns the whole design. <b>Delete:</b> <kbd>Del</kbd>.</li>
+      <li><b>Draw</b> (toolbar on the canvas): line <kbd>L</kbd>, polyline <kbd>P</kbd>, rectangle <kbd>B</kbd>, circle <kbd>O</kbd>, dimension <kbd>D</kbd>, text <kbd>T</kbd>, back to select <kbd>V</kbd>/<kbd>Esc</kbd>. Points snap to the grid, to corners and to track ends. While drawing, type a length in mm (rectangle: <code>2400x1200</code>) and press <kbd>Enter</kbd>; <kbd>Shift</kbd> locks to 15° steps. Select a single drawing to drag its corner handles; double-click text to edit it.</li>
+      <li><b>Save</b> (<kbd>Ctrl</kbd>+<kbd>S</kbd>) keeps the current name, <b>Save as…</b> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) stores a copy under a new name. <b>Save to file…</b> / <b>Open file…</b> exchange layouts as JSON files.</li>
       <li><b>View:</b> drag empty space to pan, mouse wheel to zoom, <kbd>F</kbd> to fit.</li>
       <li><b>Undo:</b> <kbd>Ctrl</kbd>+<kbd>Z</kbd>, redo <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>. Your work is also autosaved in this browser.</li>
     </ul>

@@ -160,3 +160,64 @@ kbd { font: 11px ui-monospace, monospace; border: 1px solid var(--border); borde
   .toolbar { padding: 8px 16px; }
   .status .hint { display: none; }
 }
+
+/* ---------- drawing ---------- */
+:root { --draw: #2b5d8a; --dim: #b4462b; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --draw: #8fbbe6; --dim: #ff9a7a; } }
+:root[data-theme="dark"] { --draw: #8fbbe6; --dim: #ff9a7a; }
+
+.drawbar {
+  position: absolute; left: 12px; top: 12px; display: flex; align-items: center; gap: 2px; flex-wrap: wrap;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 4px;
+  box-shadow: 0 2px 10px rgba(0,0,0,.08); max-width: calc(100% - 24px);
+}
+.drawbar button { min-height: 32px; width: 34px; padding: 0; display: grid; place-items: center; background: transparent; border-color: transparent; }
+.drawbar button:hover { background: var(--btn-hover); }
+.drawbar button.on { background: var(--accent-soft); border-color: var(--accent); }
+.drawbar svg { width: 18px; height: 18px; fill: none; stroke: var(--text); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.drawbar button[data-tool="select"] svg path { fill: var(--text); stroke: none; }
+.drawbar .sep { width: 1px; align-self: stretch; background: var(--border); margin: 2px 4px; }
+.drawbar label { display: flex; align-items: center; gap: 4px; padding: 0 6px; color: var(--muted); font-size: 12px; user-select: none; }
+.drawbar select { min-height: 26px; padding: 2px 4px; font-size: 12px; }
+#canvas.drawing { cursor: crosshair; }
+#canvas.drawing .part, #canvas.drawing .shape { cursor: crosshair; }
+
+.shape { cursor: move; }
+.shape path { vector-effect: non-scaling-stroke; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.shape .hit { stroke: transparent; stroke-width: 14px; pointer-events: stroke; }
+.shape .hitfill { fill: transparent; stroke: none; pointer-events: fill; }
+.shape .stroke { stroke: var(--draw); stroke-width: 2.2px; pointer-events: none; }
+.shape .dline { stroke: var(--dim); stroke-width: 1px; pointer-events: none; }
+.shape .darrow { fill: var(--dim); stroke: none; pointer-events: none; }
+.shape .dtext { font-size: 12px; fill: var(--dim); text-anchor: middle; dominant-baseline: central; font-variant-numeric: tabular-nums;
+  paint-order: stroke; stroke: var(--canvas); stroke-width: 4px; pointer-events: none; font-weight: 600; }
+.shape .stext { fill: var(--draw); pointer-events: none; font-family: system-ui, sans-serif; }
+.shape.sel .stroke { stroke: var(--sel); stroke-width: 3px; }
+.shape.sel .dline { stroke: var(--sel); }
+.shape.sel .darrow, .shape.sel .dtext, .shape.sel .stext { fill: var(--sel); }
+.shape.draft { opacity: .7; pointer-events: none; }
+.draftpath { fill: none; stroke: var(--accent); stroke-width: 1.5px; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; pointer-events: none; }
+.snapmark { fill: none; stroke: var(--muted); stroke-width: 1px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.snapmark.vertex { stroke: var(--ok); stroke-width: 2px; }
+
+#ui .selbox { fill: none; stroke: var(--sel); stroke-dasharray: 3 4; opacity: .7; pointer-events: none; }
+.rothandle { cursor: grab; }
+.rothandle line { stroke: var(--sel); stroke-width: 1px; }
+.rothandle circle { fill: var(--panel); stroke: var(--sel); stroke-width: 1.5px; }
+.rothandle .roticon { fill: none; stroke: var(--sel); stroke-width: 1.4px; pointer-events: none; }
+.vhandle { fill: var(--panel); stroke: var(--sel); stroke-width: 1.5px; cursor: pointer; }
+.vhandle.off { fill: var(--sel); }
+
+.measure {
+  position: absolute; pointer-events: none; background: var(--text); color: var(--panel); border-radius: 6px;
+  padding: 2px 7px; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; z-index: 2;
+}
+label.angle { display: flex; align-items: center; gap: 2px; color: var(--muted); }
+label.angle input { width: 58px; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 5px 6px; min-height: 30px; text-align: right; }
+input.wide { width: 100%; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; }
+label.inline { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+label.inline input { width: 80px; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 5px 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; max-height: 30vh; overflow-y: auto; }
+.chips .small { width: 100%; font-size: 12px; }
+.chip { min-height: 26px; padding: 2px 10px; border-radius: 13px; font-size: 12px; }
+.emptyhint { top: 50%; }

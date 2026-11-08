@@ -197,6 +197,7 @@ final class SchemeHandler: NSObject, WKURLSchemeHandler {
 
 final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMessageHandler, WKNavigationDelegate {
     let webView: WKWebView
+    private var titleObservation: NSKeyValueObservation?
 
     init(store: Store) {
         let cfg = WKWebViewConfiguration()
@@ -217,6 +218,10 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
         webView.uiDelegate = self
         webView.navigationDelegate = self
         if #available(macOS 13.3, *) { webView.isInspectable = true }
+        // mirror the page title ("• Layout name — SmardTrackLayout") in the window title
+        titleObservation = webView.observe(\.title, options: [.new]) { [weak win] wv, _ in
+            if let t = wv.title, !t.isEmpty { win?.title = t }
+        }
         webView.load(URLRequest(url: URL(string: "\(scheme)://app/index.html")!))
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -330,10 +335,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = sub("File", [
             item("New Layout", "stlApp.newLayout()", "n"),
             item("Open…", "stlApp.open()", "o"),
-            item("Save", "stlApp.save()", "s"),
             .separator(),
-            item("Import JSON…", "stlApp.importJson()", "i", [.command, .shift]),
-            item("Export JSON…", "stlApp.exportJson()", "e", [.command, .shift]),
+            item("Save", "stlApp.save()", "s"),
+            item("Save As…", "stlApp.saveAs()", "s", [.command, .shift]),
+            .separator(),
+            item("Open File…", "stlApp.openFile()", "o", [.command, .shift]),
+            item("Save to File…", "stlApp.saveToFile()", "s", [.command, .option]),
             .separator(),
             folder,
             .separator(),
@@ -347,6 +354,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"),
             NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"),
             NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"),
+        ])
+        _ = sub("Arrange", [
+            item("Rotate Clockwise", "stlApp.rotate()", "r", [.command, .option]),
+            item("Rotate Counter-Clockwise", "stlApp.rotate(-(parseFloat(document.getElementById('rotStep').value)||15))", "r", [.command, .option, .shift]),
+            item("Rotate 90° Clockwise", "stlApp.rotate(90)", ""),
+            item("Rotate 180°", "stlApp.rotate(180)", ""),
+        ])
+        _ = sub("Tools", [
+            item("Select / Move   V", "stlApp.tool('select')", ""),
+            .separator(),
+            item("Line   L", "stlApp.tool('line')", ""),
+            item("Polyline / Outline   P", "stlApp.tool('poly')", ""),
+            item("Rectangle   B", "stlApp.tool('rect')", ""),
+            item("Circle   O", "stlApp.tool('circle')", ""),
+            item("Dimension   D", "stlApp.tool('dim')", ""),
+            item("Text   T", "stlApp.tool('text')", ""),
         ])
         _ = sub("View", [
             item("Zoom to Fit", "stlApp.fit()", "0"),
