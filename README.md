@@ -7,7 +7,8 @@ A browser-based model railway track layout editor built on the
 - Click a piece to place it. It connects to the active open end (blue). Use **Tab / Flip end** to attach it by its other end, so a curve bends right instead of left.
 - Drag pieces near an open end and they snap together. The app detects connections automatically.
 - It also has rotate, delete, undo/redo, box select, double-click to select a connected group, zoom/pan, part number labels and a parts list (CSV).
-- Layouts are saved on the server, exported or imported as JSON, and autosaved in the browser.
+- **Save as…** writes the layout (track and drawings) to a JSON file, **Open…** loads one. Your current work is autosaved in the browser.
+- Drawing tools for baseboard outlines: line, polyline, rectangle, circle, text and dimensions. Dimensions can be linked to edges. Rectangles have edge handles to change only the width or height, and a Properties panel takes exact values from the keyboard.
 
 ## Run locally
 
@@ -32,9 +33,9 @@ The app runs at `http://192.168.178.74:8080/`. Saved layouts and cached library 
 ```
 
 The macOS app is a native Swift/WebKit shell around the same editor. It doesn't need a server or Node: a `WKURLSchemeHandler` answers the editor's `/api` calls inside the app.
-- Layouts are stored in `~/Library/Application Support/SmardTrackLayout/layouts` (File ▸ Show Layouts Folder in Finder).
+- File ▸ Save As… (⌘S) and Open… (⌘O) use the normal macOS file dialogs. Your current work is autosaved between sessions.
 - Library files are fetched from SourceForge and cached next to the layouts. The Märklin C-track files work offline.
-- Export and parts-list CSV open a native save dialog. The usual shortcuts work: ⌘N/O/S, ⌘Z/⇧⌘Z, ⌘0 fit, ⌘L labels.
+- The usual shortcuts work: ⌘N/O/S, ⌘Z/⇧⌘Z, ⌘0 fit, ⌘L labels.
 - `STL_SELFTEST=1 dist/SmardTrackLayout.app/Contents/MacOS/SmardTrackLayout` runs a scripted smoke test and prints the result.
 
 The app is ad-hoc signed. On another Mac, Gatekeeper blocks it the first time; right-click ▸ Open to allow it.

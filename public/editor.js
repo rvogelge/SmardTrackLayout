@@ -21,7 +21,7 @@ const S = window.__stl = {
   undo: [], redo: [], conn: new Map(), allEnds: [],
   labels: false, drag: null, snap: null,
   tool: 'select', draft: null, typed: '', cursor: null, space: false,
-  grid: 10, autoDim: true, savedName: null, dirty: false,
+  grid: 10, autoDim: true, dirty: false, lastPanMoved: false,
 };
 
 // ---------------------------------------------------------------- utilities
@@ -283,7 +283,19 @@ function buildShapeEl(s) {
   return g;
 }
 
+// dimensions linked to an edge of another shape follow that edge
+function syncDims() {
+  for (const d of S.shapes) {
+    if (d.type !== 'dim' || !d.ref) continue;
+    const t = shapeById(d.ref.shape), n = t?.pts?.length || 0;
+    if (!t || t.type === 'text' || t.type === 'dim' || d.ref.edge >= (t.closed ? n : n - 1)) { delete d.ref; continue; }
+    const a = t.pts[d.ref.edge], b = t.pts[(d.ref.edge + 1) % n];
+    d.pts = d.ref.rev ? [[...b], [...a]] : [[...a], [...b]];
+  }
+}
+
 function renderShapes() {
+  syncDims();
   shapesLayer.innerHTML = ''; annoLayer.innerHTML = '';
   for (const s of S.shapes) (s.type === 'dim' || s.type === 'text' ? annoLayer : shapesLayer).append(buildShapeEl(s));
 }
@@ -341,6 +353,17 @@ function renderUI() {
   ui.append(rot);
   if (items.length === 1 && items[0].pts && items[0].type !== 'text') {
     const s = items[0];
+    if (isRect(s)) {
+      // edge handles change only width or height, corner handles keep the rectangle
+      s.pts.forEach((p, i) => {
+        const q = s.pts[(i + 1) % 4], [x, y] = toScreen([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]);
+        const horiz = Math.abs(q[0] - p[0]) * S.view.z > Math.abs(q[1] - p[1]) * S.view.z;
+        ui.append(el('rect', { class: 'ehandle ' + (horiz ? 'ns' : 'ew'), 'data-handle': 'redge', 'data-idx': i,
+          x: x - (horiz ? 9 : 4), y: y - (horiz ? 4 : 9), width: horiz ? 18 : 8, height: horiz ? 8 : 18, rx: 3 }));
+      });
+      s.pts.forEach((p, i) => { const [x, y] = toScreen(p); ui.append(el('rect', { class: 'vhandle', 'data-handle': 'rcorner', 'data-idx': i, x: x - 5, y: y - 5, width: 10, height: 10 })); });
+      return;
+    }
     s.pts.forEach((p, i) => { const [x, y] = toScreen(p); ui.append(el('rect', { class: 'vhandle', 'data-handle': 'v', 'data-idx': i, x: x - 5, y: y - 5, width: 10, height: 10 })); });
     if (s.type === 'dim') {
       const g = dimGeom(s), [x, y] = toScreen([(g.a[0] + g.b[0]) / 2, (g.a[1] + g.b[1]) / 2]);
@@ -366,6 +389,7 @@ function updateStatus() {
   } else if (!S.active && S.parts.length) hint = 'Click an orange open end to choose where the next piece attaches.';
   $('#stHint').textContent = hint;
   document.title = `${S.dirty ? '• ' : ''}${$('#layoutName').value || 'Untitled'} — SmardTrackLayout`;
+  renderProps();
   scheduleAutosave();
 }
 
@@ -375,6 +399,7 @@ function shapeInfo(s) {
   if (s.type === 'dim') return `Dimension · ${mm(len(...s.pts))} mm`;
   if (s.type === 'circle') return `Circle · r ${mm(len(...s.pts))} mm`;
   if (s.type === 'text') return `Text “${s.text}” · ${mm(s.size)} mm`;
+  if (isRect(s)) { const [w, h] = rectSize(s); return `Rectangle · ${mm(w)} × ${mm(h)} mm · drag the edge bars to change width or height`; }
   const b = shapeBBox(s);
   let per = 0; for (let i = 1; i < s.pts.length; i++) per += len(s.pts[i - 1], s.pts[i]);
   if (s.closed) per += len(s.pts.at(-1), s.pts[0]);
@@ -467,7 +492,7 @@ function deleteSelection() {
   if (!S.sel.size) return;
   pushUndo();
   S.parts = S.parts.filter((p) => !S.sel.has(p.id));
-  S.shapes = S.shapes.filter((s) => !S.sel.has(s.id));
+  S.shapes = S.shapes.filter((s) => !S.sel.has(s.id) && !(s.ref && S.sel.has(s.ref.shape)));
   for (const id of S.sel) { S.els.get(id)?.remove(); S.els.delete(id); }
   S.sel.clear(); S.lastPlace = null;
   renderShapes(); refresh();
@@ -552,17 +577,37 @@ function draftPoint(ev) {
 function addShape(s) {
   s.id = S.nextId++; S.shapes.push(s); return s;
 }
-function addRectDims(pts) {
-  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-  addShape({ type: 'dim', pts: [[x0, y0], [x1, y0]], off: -AUTO_DIM_OFFSET });
-  addShape({ type: 'dim', pts: [[x0, y1], [x0, y0]], off: -AUTO_DIM_OFFSET });
+// rectangles: closed 4-point polys, counter-clockwise from the lower-left corner,
+// so edge 0 = width (bottom), edge 1 = height (right); negative dim offsets lie outside
+const isRect = (s) => s?.type === 'poly' && s.rect && s.pts.length === 4;
+function makeRect(a, b) {
+  const x0 = Math.min(a[0], b[0]), x1 = Math.max(a[0], b[0]), y0 = Math.min(a[1], b[1]), y1 = Math.max(a[1], b[1]);
+  return { type: 'poly', closed: true, rect: true, pts: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]] };
+}
+function addRectDims(r) {
+  addShape({ type: 'dim', ref: { shape: r.id, edge: 0 }, pts: [r.pts[0], r.pts[1]], off: -AUTO_DIM_OFFSET });
+  addShape({ type: 'dim', ref: { shape: r.id, edge: 3 }, pts: [r.pts[3], r.pts[0]], off: -AUTO_DIM_OFFSET });
+}
+// a dimension drawn exactly between two neighbouring corners gets linked to that edge
+function findEdgeRef(p1, p2) {
+  const same = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-6;
+  for (const s of S.shapes) {
+    if (!s.pts || s.type === 'dim' || s.type === 'text' || s.type === 'circle') continue;
+    const n = s.pts.length, edges = s.closed ? n : n - 1;
+    for (let i = 0; i < edges; i++) {
+      const a = s.pts[i], b = s.pts[(i + 1) % n];
+      if (same(a, p1) && same(b, p2)) return { shape: s.id, edge: i };
+      if (same(a, p2) && same(b, p1)) return { shape: s.id, edge: i, rev: true };
+    }
+  }
+  return null;
 }
 
 function commitShape(s, { autoDims = false } = {}) {
   pushUndo();
   addShape(s);
-  if (autoDims && S.autoDim) addRectDims(s.pts);
+  if (s.type === 'dim') { const ref = findEdgeRef(...s.pts); if (ref) s.ref = ref; }
+  if (autoDims && S.autoDim) addRectDims(s);
   renderShapes(); updateStatus();
 }
 
@@ -577,7 +622,7 @@ function commitPoint(p) {
   else if (t === 'rect') {
     const [a, b] = [D.pts[0], pt];
     if (Math.abs(a[0] - b[0]) > 1e-6 && Math.abs(a[1] - b[1]) > 1e-6) {
-      commitShape({ type: 'poly', closed: true, pts: [[a[0], a[1]], [b[0], a[1]], [b[0], b[1]], [a[0], b[1]]] }, { autoDims: true });
+      commitShape(makeRect(a, b), { autoDims: true });
     }
     S.draft = null;
   } else if (t === 'circle') { if (!same(last, pt)) commitShape({ type: 'circle', pts: [last, pt] }); S.draft = null; }
@@ -669,6 +714,110 @@ $('#dlgText').addEventListener('close', () => {
   else commitShape({ type: 'text', pts: [T.pt], text, size, angle: 0 });
 });
 
+// ---------------------------------------------------------------- properties panel (keyboard entry)
+const propsEl = $('#props');
+let propsKey = '';
+const segLen = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+const segAng = (a, b) => norm(deg(Math.atan2(b[1] - a[1], b[0] - a[0])));
+const r2 = (v) => +v.toFixed(2);
+
+// width (axis 0) or height (axis 1) of a rectangle; the lower-left corner stays put
+function setRectSize(s, axis, len) {
+  const a = s.pts[axis], b = s.pts[axis + 1], cur = segLen(a, b);
+  if (cur < 1e-9 || !(len > 0)) return;
+  const u = unit(sub(b, a)), d = len - cur;
+  for (const i of axis === 0 ? [1, 2] : [2, 3]) s.pts[i] = [s.pts[i][0] + u[0] * d, s.pts[i][1] + u[1] * d];
+}
+function setSegLen(pts, i, j, len) {
+  const u = unit(sub(pts[j], pts[i]));
+  pts[j] = [pts[i][0] + u[0] * len, pts[i][1] + u[1] * len];
+}
+function rotateShapeTo(s, cur, target) {
+  const [cx, cy] = itemCenter(s); rotateItem(s, cx, cy, -(target - cur));
+}
+// typing a dimension value resizes what it measures
+function setDimLength(d, len) {
+  const t = d.ref && shapeById(d.ref.shape);
+  if (t && isRect(t)) return setRectSize(t, d.ref.edge % 2, len);
+  if (t) { const n = t.pts.length, i = d.ref.edge, j = (i + 1) % n; return setSegLen(t.pts, d.ref.rev ? j : i, d.ref.rev ? i : j, len); }
+  setSegLen(d.pts, 0, 1, len);
+}
+const moveTo = (s, x, y) => translateItem(s, x - s.pts[0][0], y - s.pts[0][1]);
+
+function propFields(s) {
+  const F = [], num = (key, label, val, unit, set, min) => F.push({ key, label, val, unit, set, min });
+  const xy = (lx = 'X', ly = 'Y') => {
+    num('x', lx, mm(s.pts[0][0]), 'mm', (v) => moveTo(s, v / MM, s.pts[0][1]));
+    num('y', ly, mm(s.pts[0][1]), 'mm', (v) => moveTo(s, s.pts[0][0], v / MM));
+  };
+  if (isRect(s)) {
+    const [w, h] = rectSize(s);
+    num('w', 'Width', mm(w), 'mm', (v) => setRectSize(s, 0, v / MM), 1);
+    num('h', 'Height', mm(h), 'mm', (v) => setRectSize(s, 1, v / MM), 1);
+    num('a', 'Angle', r2(segAng(s.pts[0], s.pts[1])), '°', (v) => rotateShapeTo(s, segAng(s.pts[0], s.pts[1]), v));
+    xy();
+  } else if (s.type === 'line') {
+    num('l', 'Length', mm(segLen(...s.pts)), 'mm', (v) => setSegLen(s.pts, 0, 1, v / MM), 1);
+    num('a', 'Angle', r2(segAng(...s.pts)), '°', (v) => { const L = segLen(...s.pts); s.pts[1] = [s.pts[0][0] + Math.cos(rad(v)) * L, s.pts[0][1] + Math.sin(rad(v)) * L]; });
+    xy('X start', 'Y start');
+  } else if (s.type === 'circle') {
+    num('r', 'Radius', mm(segLen(...s.pts)), 'mm', (v) => setSegLen(s.pts, 0, 1, v / MM), 1);
+    num('d', 'Diameter', mm(2 * segLen(...s.pts)), 'mm', (v) => setSegLen(s.pts, 0, 1, v / MM / 2), 1);
+    xy('X centre', 'Y centre');
+  } else if (s.type === 'dim') {
+    num('l', 'Length', mm(segLen(...s.pts)), 'mm', (v) => setDimLength(s, v / MM), 1);
+    num('o', 'Offset', mm(Math.abs(s.off || 0)), 'mm', (v) => { s.off = (Math.sign(s.off || -1)) * v / MM; }, 0);
+  } else if (s.type === 'text') {
+    F.push({ key: 't', label: 'Text', val: s.text, text: true, set: (v) => { if (String(v).trim()) s.text = String(v).trim(); } });
+    num('s', 'Height', mm(s.size), 'mm', (v) => { s.size = v / MM; }, 1);
+    num('a', 'Angle', r2(s.angle || 0), '°', (v) => { s.angle = norm(v); });
+    xy();
+  } else if (s.type === 'poly') {
+    const n = s.pts.length, edges = s.closed ? n : n - 1;
+    for (let i = 0; i < Math.min(edges, 16); i++) {
+      const j = (i + 1) % n;
+      num('s' + i, `Side ${i + 1}`, mm(segLen(s.pts[i], s.pts[j])), 'mm', (v) => {
+        const before = [...s.pts[j]]; setSegLen(s.pts, i, j, v / MM);
+        if (!s.closed) for (let k = j + 1; k < n; k++) s.pts[k] = [s.pts[k][0] + s.pts[j][0] - before[0], s.pts[k][1] + s.pts[j][1] - before[1]];
+      }, 1);
+    }
+    xy();
+  }
+  return F;
+}
+
+const PROP_TITLES = { line: 'Line', circle: 'Circle', dim: 'Dimension', text: 'Text', poly: 'Polyline' };
+function renderProps() {
+  const s = S.tool === 'select' && S.sel.size === 1 ? shapeById([...S.sel][0]) : null;
+  if (!s) { propsEl.hidden = true; propsKey = ''; return; }
+  const fields = propFields(s);
+  const key = s.id + ':' + fields.map((f) => f.key).join(',');
+  if (key !== propsKey) {
+    propsKey = key;
+    const title = isRect(s) ? 'Rectangle' : s.type === 'poly' && s.closed ? 'Outline' : s.type === 'dim' && s.ref ? 'Dimension (linked)' : PROP_TITLES[s.type];
+    propsEl.innerHTML = `<div class="ptitle">${title}</div>` + fields.map((f) =>
+      `<label><span>${f.label}</span><input data-k="${f.key}" ${f.text ? 'class="ptext"' : 'inputmode="decimal"'} spellcheck="false" autocomplete="off"><em>${f.unit || ''}</em></label>`).join('') +
+      `<div class="phint">${s.type === 'dim' && s.ref ? 'Changing the length resizes the measured shape. ' : ''}Enter applies · Tab next</div>`;
+    for (const inp of propsEl.querySelectorAll('input')) inp.addEventListener('change', () => applyProp(inp.dataset.k, inp.value));
+  }
+  for (const f of fields) { const inp = propsEl.querySelector(`input[data-k="${f.key}"]`); if (inp && inp !== document.activeElement) inp.value = f.val; }
+  propsEl.hidden = false;
+}
+
+function applyProp(k, raw) {
+  const s = shapeById([...S.sel][0]); if (!s) return;
+  const f = propFields(s).find((x) => x.key === k); if (!f) return;
+  let v = raw;
+  if (!f.text) {
+    v = parseFloat(String(raw).replace(',', '.'));
+    if (!isFinite(v)) { propsKey = ''; renderProps(); return; }
+    if (f.min != null) v = Math.max(f.min, v);
+  }
+  pushUndo(); f.set(v); renderShapes(); refresh();
+  const nf = propFields(s).find((x) => x.key === k), inp = propsEl.querySelector(`input[data-k="${k}"]`);
+  if (nf && inp) inp.value = nf.val;
+}
+
 // ---------------------------------------------------------------- pointer handling
 function toWorldPt(cx, cy) {
   const r = svg.getBoundingClientRect(), { tx, ty, z } = S.view;
@@ -684,16 +833,17 @@ svg.addEventListener('pointerdown', (ev) => {
   svg.setPointerCapture(ev.pointerId);
   const [wx, wy] = toWorldPt(ev.clientX, ev.clientY);
   if (ev.button === 1 || (ev.button === 0 && S.space)) return startPan(ev);
-  if (ev.button !== 0) return;
 
   const handle = ev.target.closest('[data-handle]');
+  if (ev.button === 2) return startPan(ev);
+  if (ev.button !== 0) return;
   if (handle) {
-    const items = selectedItems();
-    if (handle.dataset.handle === 'rot') {
+    const items = selectedItems(), h = handle.dataset.handle;
+    if (h === 'rot') {
       const b = unionBBox(items), c = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2];
       S.drag = { mode: 'rotate', c, a0: deg(Math.atan2(wy - c[1], wx - c[0])), orig: clone(items), moved: false };
     } else {
-      S.drag = { mode: handle.dataset.handle === 'off' ? 'off' : 'vertex', id: items[0].id, idx: +handle.dataset.idx, moved: false };
+      S.drag = { mode: h === 'v' ? 'vertex' : h, id: items[0].id, idx: +handle.dataset.idx, orig: clone(items[0].pts), moved: false };
     }
     return;
   }
@@ -701,7 +851,6 @@ svg.addEventListener('pointerdown', (ev) => {
 
   const endEl = ev.target.closest('.end');
   const itemEl = ev.target.closest('.part, .shape');
-  if (!endEl && !itemEl && !ev.shiftKey) return startPan(ev);
   if (endEl) {
     S.active = { pid: +endEl.dataset.pid, i: +endEl.dataset.i };
     renderOverlay(); updateStatus(); return;
@@ -716,8 +865,62 @@ svg.addEventListener('pointerdown', (ev) => {
     S.drag = { mode: 'move', wx, wy, ids, orig: clone(selectedItems()), moved: false, sx: ev.clientX, sy: ev.clientY };
     return;
   }
-  S.drag = { mode: 'box', sx: ev.clientX, sy: ev.clientY, wx, wy };
+  // empty space: rubber-band selection (Shift adds to the current selection)
+  S.drag = { mode: 'box', sx: ev.clientX, sy: ev.clientY, wx, wy, add: ev.shiftKey, hits: new Set() };
 });
+
+const boxEl = $('#boxSel');
+const showBox = (on) => { boxEl.style.display = on ? '' : 'none'; };
+showBox(false);
+function clearPresel() { for (const g of svg.querySelectorAll('.presel')) g.classList.remove('presel'); }
+function cancelBox() { showBox(false); clearPresel(); S.drag = null; }
+
+// left-to-right: items completely inside; right-to-left: items touching the box
+function boxHits(D) {
+  const x0 = Math.min(D.wx, D.wx2), x1 = Math.max(D.wx, D.wx2), y0 = Math.min(D.wy, D.wy2), y1 = Math.max(D.wy, D.wy2);
+  const crossing = D.wx2 < D.wx, hits = new Set();
+  for (const it of [...S.parts, ...S.shapes]) {
+    const b = itemBBox(it);
+    const inside = b.x0 >= x0 && b.x1 <= x1 && b.y0 >= y0 && b.y1 <= y1;
+    const touch = b.x1 >= x0 && b.x0 <= x1 && b.y1 >= y0 && b.y0 <= y1;
+    if (crossing ? touch : inside) hits.add(it.id);
+  }
+  return hits;
+}
+
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1];
+const unit = (v) => { const L = Math.hypot(v[0], v[1]) || 1; return [v[0] / L, v[1] / L]; };
+const snapLen = (L) => { const g = S.grid > 0 ? S.grid / MM : 0; return g ? Math.round(L / g) * g : L; };
+const MIN_SIZE = 1 / MM;
+
+// move edge i of a rectangle along its outward normal; returns the new size across that edge
+function dragRectEdge(s, orig, i, w) {
+  const a = orig[i], b = orig[(i + 1) % 4], u = unit(sub(b, a)), nOut = [u[1], -u[0]];
+  const opp = orig[(i + 2) % 4], size0 = dot(sub(a, opp), nOut);
+  const size = Math.max(MIN_SIZE, snapLen(size0 + dot(sub(w, a), nOut))), d = size - size0;
+  s.pts = orig.map((p) => [...p]);
+  for (const k of [i, (i + 1) % 4]) s.pts[k] = [orig[k][0] + nOut[0] * d, orig[k][1] + nOut[1] * d];
+}
+// drag corner k, the opposite corner stays fixed and the shape stays rectangular
+function dragRectCorner(s, orig, k, w) {
+  const o = orig[(k + 2) % 4], u = unit(sub(orig[1], orig[0])), v = unit(sub(orig[3], orig[0]));
+  const c0 = sub(orig[k], o), c = sub(w, o);
+  const su = Math.sign(dot(c0, u)) || 1, sv = Math.sign(dot(c0, v)) || 1;
+  const A = su * Math.max(MIN_SIZE, snapLen(su * dot(c, u))), B = sv * Math.max(MIN_SIZE, snapLen(sv * dot(c, v)));
+  const P = (x, y) => [o[0] + u[0] * x + v[0] * y, o[1] + u[1] * x + v[1] * y];
+  // corner order relative to the fixed corner o (index k+2): k+3 lies along u or v
+  const along = (idx) => Math.abs(dot(sub(orig[idx], o), u)) > Math.abs(dot(sub(orig[idx], o), v));
+  s.pts = orig.map((p) => [...p]);
+  s.pts[k] = P(A, B);
+  for (const idx of [(k + 1) % 4, (k + 3) % 4]) s.pts[idx] = along(idx) ? P(A, 0) : P(0, B);
+}
+const rectSize = (s) => [Math.hypot(...sub(s.pts[1], s.pts[0])), Math.hypot(...sub(s.pts[2], s.pts[1]))];
+function showMeasure(ev, text) {
+  const m = $('#measure'), r = svg.getBoundingClientRect();
+  m.textContent = text; m.hidden = false;
+  m.style.left = ev.clientX - r.left + 16 + 'px'; m.style.top = ev.clientY - r.top + 14 + 'px';
+}
 
 function restoreItems(orig) {
   for (const o of orig) { const it = itemById(o.id); if (it) Object.assign(it, clone(o)); }
@@ -765,19 +968,28 @@ svg.addEventListener('pointermove', (ev) => {
     m.style.left = ev.clientX - r.left + 16 + 'px'; m.style.top = ev.clientY - r.top + 14 + 'px';
     return;
   }
-  if (D.mode === 'vertex' || D.mode === 'off') {
+  if (['vertex', 'off', 'redge', 'rcorner'].includes(D.mode)) {
     if (!D.moved) { pushUndo(); D.moved = true; }
     const s = shapeById(D.id);
     if (D.mode === 'off') s.off = dimOffset(s.pts, [wx, wy]);
-    else { const p = snapPoint(wx, wy, s.id); s.pts[D.idx] = [p.x, p.y]; }
+    else if (D.mode === 'redge') { dragRectEdge(s, D.orig, D.idx, [wx, wy]); const [w, h] = rectSize(s); showMeasure(ev, `${mm(w)} × ${mm(h)} mm`); }
+    else if (D.mode === 'rcorner') { const p = snapPoint(wx, wy, s.id); dragRectCorner(s, D.orig, D.idx, [p.x, p.y]); const [w, h] = rectSize(s); showMeasure(ev, `${mm(w)} × ${mm(h)} mm`); }
+    else { const p = snapPoint(wx, wy, s.id); s.pts[D.idx] = [p.x, p.y]; if (s.type === 'dim') delete s.ref; }
     renderShapes(); renderUI(); updateStatus();
     return;
   }
   if (D.mode === 'box') {
-    const r = svg.getBoundingClientRect(), b = $('#boxSel');
+    if (!D.moved && Math.hypot(ev.clientX - D.sx, ev.clientY - D.sy) < 4) return;
+    D.moved = true;
+    const r = svg.getBoundingClientRect();
     const x = Math.min(D.sx, ev.clientX) - r.left, y = Math.min(D.sy, ev.clientY) - r.top;
-    Object.entries({ x, y, width: Math.abs(ev.clientX - D.sx), height: Math.abs(ev.clientY - D.sy) }).forEach(([k, v]) => b.setAttribute(k, v));
-    b.hidden = false; D.wx2 = wx; D.wy2 = wy;
+    Object.entries({ x, y, width: Math.abs(ev.clientX - D.sx), height: Math.abs(ev.clientY - D.sy) }).forEach(([k, v]) => boxEl.setAttribute(k, v));
+    D.wx2 = wx; D.wy2 = wy;
+    boxEl.classList.toggle('crossing', D.wx2 < D.wx);
+    showBox(true);
+    D.hits = boxHits(D);
+    clearPresel();
+    for (const id of D.hits) (S.els.get(id) || svg.querySelector(`.shape[data-id="${id}"]`))?.classList.add('presel');
   }
 });
 
@@ -785,22 +997,21 @@ function endDrag(ev) {
   const D = S.drag; S.drag = null; svg.classList.remove('panning');
   $('#measure').hidden = S.tool === 'select' || !S.draft;
   if (!D) return;
-  if (D.mode === 'pan' && !D.moved && ev.type === 'pointerup' && S.tool === 'select') { S.sel.clear(); S.lastPlace = null; renderSelection(); renderUI(); updateStatus(); }
-  if (['move', 'rotate', 'vertex', 'off'].includes(D.mode)) { S.snap = null; refresh(); }
+  if (D.mode === 'pan') S.lastPanMoved = D.moved;
+  if (['move', 'rotate', 'vertex', 'off', 'redge', 'rcorner'].includes(D.mode)) { S.snap = null; renderShapes(); refresh(); }
   if (D.mode === 'box') {
-    $('#boxSel').hidden = true;
-    if (D.wx2 != null) {
-      const x0 = Math.min(D.wx, D.wx2), x1 = Math.max(D.wx, D.wx2), y0 = Math.min(D.wy, D.wy2), y1 = Math.max(D.wy, D.wy2);
-      for (const it of [...S.parts, ...S.shapes]) { const [cx, cy] = itemCenter(it); if (cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1) S.sel.add(it.id); }
-      renderSelection(); renderUI(); updateStatus();
-    }
+    showBox(false); clearPresel();
+    if (ev.type !== 'pointerup') return;
+    if (!D.moved) { if (!D.add) { S.sel.clear(); S.lastPlace = null; } }  // plain click on empty space: unmark
+    else S.sel = D.add ? new Set([...S.sel, ...D.hits]) : D.hits;
+    renderSelection(); renderUI(); updateStatus();
   }
 }
 svg.addEventListener('pointerup', endDrag);
 svg.addEventListener('pointercancel', endDrag);
 svg.addEventListener('contextmenu', (ev) => {
-  if (S.tool === 'select') return;
   ev.preventDefault();
+  if (S.tool === 'select' || S.lastPanMoved) { S.lastPanMoved = false; return; }
   if (S.draft?.type === 'poly') finishPoly(); else { S.draft = null; renderOverlay(); }
 });
 
@@ -847,15 +1058,23 @@ function fitView() {
 // ---------------------------------------------------------------- keyboard
 const TOOL_KEYS = { v: 'select', l: 'line', p: 'poly', b: 'rect', o: 'circle', d: 'dim', t: 'text' };
 document.addEventListener('keydown', (ev) => {
-  if (ev.target.closest('input, select, textarea, dialog') && ev.key !== 'Escape') {
+  if (ev.target.closest('#props') && ev.key === 'Escape') { ev.target.blur(); return; }
+  // in the properties panel, Ctrl+Z / Ctrl+Y undo the applied value rather than editing the text field
+  const propsUndo = ev.target.closest('#props') && (ev.ctrlKey || ev.metaKey) && 'zy'.includes(ev.key.toLowerCase());
+  if (propsUndo) { ev.target.blur(); propsKey = ''; }
+  if (!propsUndo && ev.target.closest('input, select, textarea, dialog') && ev.key !== 'Escape') {
     if (!((ev.ctrlKey || ev.metaKey) && 'so'.includes(ev.key.toLowerCase()))) return;
   }
   if (document.querySelector('dialog[open]')) return;
   const k = ev.key.toLowerCase(), mod = ev.ctrlKey || ev.metaKey;
+  if (S.drag?.mode === 'box' && k === 'escape') { cancelBox(); return; }
   if (mod && k === 'z') { ev.preventDefault(); ev.shiftKey ? redo() : undo(); return; }
   if (mod && k === 'y') { ev.preventDefault(); redo(); return; }
-  if (mod && k === 's') { ev.preventDefault(); ev.shiftKey ? saveAs() : save(); return; }
-  if (mod && k === 'o') { ev.preventDefault(); openDialog(); return; }
+  if (mod && k === 's') { ev.preventDefault(); saveAs(); return; }
+  if (mod && k === 'o') { ev.preventDefault(); openFile(); return; }
+  if (!mod && k === 'enter' && S.tool === 'select') {
+    const f = $('#props:not([hidden]) input'); if (f) { ev.preventDefault(); f.focus(); f.select(); return; }
+  }
   if (mod && k === 'a') { ev.preventDefault(); setTool('select'); S.sel = new Set([...S.parts, ...S.shapes].map((it) => it.id)); renderSelection(); renderUI(); updateStatus(); return; }
   if (mod) return;
   if (k === ' ') { S.space = true; return; }
@@ -872,7 +1091,7 @@ document.addEventListener('keydown', (ev) => {
   if (k === 'escape') {
     if (S.draft) { S.draft.type === 'poly' ? finishPoly() : (S.draft = null); S.typed = ''; renderOverlay(); updateStatus(); return; }
     if (S.tool !== 'select') { setTool('select'); return; }
-    S.sel.clear(); S.active = null; S.lastPlace = null; ev.target.blur?.(); renderSelection(); renderOverlay(); renderUI(); updateStatus(); return;
+    S.sel.clear(); S.active = null; S.lastPlace = null; ev.target.blur?.(); clearPresel(); showBox(false); renderSelection(); renderOverlay(); renderUI(); updateStatus(); return;
   }
   if (TOOL_KEYS[k] && !ev.shiftKey) { setTool(TOOL_KEYS[k]); return; }
   if (k === 'delete' || k === 'backspace') { ev.preventDefault(); deleteSelection(); }
@@ -885,16 +1104,15 @@ const step = () => { const v = parseFloat(String($('#rotStep').value).replace(',
 
 // ---------------------------------------------------------------- persistence
 const native = window.webkit?.messageHandlers?.stl; // running inside the macOS app?
-const WHERE = native ? '' : ' on the server';
 const layoutName = () => $('#layoutName').value.trim() || 'Untitled';
 
 function layoutDoc() {
   const r = (v) => +v.toFixed(5);
   return {
-    format: 'smardtracklayout', version: 2, name: layoutName(), units: 'inch',
+    format: 'smardtracklayout', version: 3, name: layoutName(), units: 'inch',
     libraries: [...new Set(S.parts.map((p) => p.lib))],
     parts: S.parts.map(({ lib, title, x, y, rot }) => ({ lib, title, x: r(x), y: r(y), rot: +rot.toFixed(4) })),
-    shapes: S.shapes.map(({ id, pts, ...rest }) => ({ ...rest, pts: pts.map(([x, y]) => [r(x), r(y)]) })),
+    shapes: S.shapes.map(({ pts, ...rest }) => ({ ...rest, pts: pts.map(([x, y]) => [r(x), r(y)]) })),
   };
 }
 
@@ -906,7 +1124,13 @@ async function loadDoc(doc, { keepView = false } = {}) {
   S.parts = doc.parts.map((p, i) => ({ id: i + 1, lib: p.lib, title: p.title, x: +p.x || 0, y: +p.y || 0, rot: +p.rot || 0 }));
   S.nextId = S.parts.length + 1;
   S.shapes = [];
-  for (const s of doc.shapes || []) if (Array.isArray(s.pts) && s.pts.length) addShape(clone(s));
+  const idMap = new Map();
+  for (const s of doc.shapes || []) {
+    if (!Array.isArray(s.pts) || !s.pts.length) continue;
+    const old = s.id, c = addShape(clone(s));
+    if (old != null) idMap.set(old, c.id);
+  }
+  for (const s of S.shapes) if (s.ref) { const id = idMap.get(s.ref.shape); if (id) s.ref.shape = id; else delete s.ref; }
   S.sel.clear(); S.active = null; S.lastPlace = null; S.undo = []; S.redo = [];
   $('#layoutName').value = doc.name || 'Untitled';
   setTool('select');
@@ -920,77 +1144,20 @@ let autosaveTimer;
 function scheduleAutosave() {
   clearTimeout(autosaveTimer);
   autosaveTimer = setTimeout(() => {
-    try { localStorage.setItem('stl.autosave', JSON.stringify({ ...layoutDoc(), view: S.view, savedName: S.savedName, dirty: S.dirty })); } catch { /* ignore */ }
+    try { localStorage.setItem('stl.autosave', JSON.stringify({ ...layoutDoc(), view: S.view, dirty: S.dirty })); } catch { /* ignore */ }
   }, 400);
 }
 
-const listLayouts = () => fetch('api/layouts').then((r) => r.json()).catch(() => []);
-
-async function writeLayout(name) {
-  $('#layoutName').value = name;
-  const doc = layoutDoc();
-  const res = await fetch('api/layouts/' + encodeURIComponent(name), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(doc) });
-  if (!res.ok) { toast('Save failed: ' + ((await res.json().catch(() => ({}))).error || res.statusText), 5000); return false; }
-  S.savedName = name; S.dirty = false; updateStatus();
-  toast(`Saved “${name}”${WHERE}`);
-  return true;
+// Save as…: write the layout to a JSON file of the user's choice
+function saveAs() {
+  const d = layoutDoc();
+  download(d.name + '.stl.json', JSON.stringify(d, null, 1), 'application/json');
+  S.dirty = false; updateStatus();
 }
-
-// Save: to the current name; first save (or untitled) asks for a name
-async function save() {
-  const name = layoutName();
-  if (!S.savedName && (name === 'Untitled' || (await listLayouts()).some((l) => l.name === name))) return saveAs();
-  return writeLayout(name);
-}
-
-// Save As: choose a (new) name; confirms before overwriting another layout
-async function saveAs() {
-  const dlg = $('#dlgSaveAs'), input = $('#saveAsName'), list = $('#saveAsList');
-  input.value = layoutName() === 'Untitled' ? '' : layoutName();
-  list.innerHTML = '';
-  dlg.showModal(); input.focus(); input.select();
-  const items = await listLayouts();
-  list.innerHTML = items.length ? '<div class="muted small">Existing layouts (click to overwrite):</div>' : '';
-  for (const it of items) {
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = it.name;
-    b.onclick = () => { input.value = it.name; input.focus(); };
-    list.append(b);
-  }
-  return new Promise((resolve) => {
-    dlg.onclose = async () => {
-      dlg.onclose = null;
-      if (dlg.returnValue !== 'ok') return resolve(false);
-      const name = input.value.trim();
-      if (!/^[\p{L}\p{N} _.-]{1,64}$/u.test(name) || name.startsWith('.')) { toast('Use letters, digits, spaces, “_”, “-” or “.” (max. 64)', 4000); return resolve(false); }
-      if (name !== S.savedName && items.some((l) => l.name === name) && !confirm(`“${name}” already exists. Replace it?`)) return resolve(false);
-      resolve(await writeLayout(name));
-    };
-  });
-}
-
-async function openDialog() {
-  const list = $('#openList'); list.innerHTML = '<div class="muted">Loading…</div>';
-  $('#dlgOpen').showModal();
-  const items = await listLayouts();
-  if (!items.length) { list.innerHTML = `<div class="muted">No layouts saved${WHERE} yet.</div>`; return; }
-  list.innerHTML = '';
-  for (const it of items) {
-    const row = document.createElement('div'); row.className = 'openrow';
-    row.innerHTML = `<button type="button" class="open"><span>${esc(it.name)}</span><small>${new Date(it.modified).toLocaleString()}</small></button><button type="button" class="del" title="Delete">✕</button>`;
-    row.querySelector('.open').onclick = async () => {
-      if (S.dirty && S.parts.length + S.shapes.length && !confirm('Discard unsaved changes to the current layout?')) return;
-      const doc = await fetch('api/layouts/' + encodeURIComponent(it.name)).then((r) => r.json());
-      $('#dlgOpen').close();
-      await loadDoc(doc).then(() => { S.savedName = it.name; S.dirty = false; updateStatus(); }).catch((e) => toast(e.message));
-    };
-    row.querySelector('.del').onclick = async () => {
-      if (!confirm(`Delete layout “${it.name}”${WHERE ? ' from the server' : ''}?`)) return;
-      await fetch('api/layouts/' + encodeURIComponent(it.name), { method: 'DELETE' }); row.remove();
-      if (S.savedName === it.name) S.savedName = null;
-    };
-    list.append(row);
-  }
-}
+const openFile = () => {
+  if (S.dirty && S.parts.length + S.shapes.length && !confirm('Discard unsaved changes to the current layout?')) return;
+  $('#fileImport').click();
+};
 
 function download(name, text, type) {
   if (native) { native.postMessage({ type: 'download', name, text }); return; }
@@ -998,7 +1165,6 @@ function download(name, text, type) {
   a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
-const saveToFile = () => { const d = layoutDoc(); download(d.name + '.stl.json', JSON.stringify(d, null, 1), 'application/json'); };
 
 function bomRows() {
   const m = new Map();
@@ -1020,7 +1186,7 @@ function showBom() {
 
 function newLayout() {
   if (S.dirty && S.parts.length + S.shapes.length && !confirm('Start a new layout? Unsaved changes in the current one are lost.')) return;
-  loadDoc({ name: 'Untitled', parts: [], shapes: [] }).then(() => { S.savedName = null; S.dirty = false; updateStatus(); });
+  loadDoc({ name: 'Untitled', parts: [], shapes: [] }).then(() => { S.dirty = false; updateStatus(); });
 }
 
 // ---------------------------------------------------------------- wiring
@@ -1036,15 +1202,12 @@ $('#chkLabels').onchange = (e) => { S.labels = e.target.checked; renderOverlay()
 $('#btnBom').onclick = showBom;
 $('#btnBomCsv').onclick = () => download(`${layoutName()} parts.csv`, 'Part no;Description;Manufacturer;Qty\n' + bomRows().map((r) => [r.partno, r.desc, r.mfr, r.n].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\n'), 'text/csv');
 $('#btnHelp').onclick = () => $('#dlgHelp').showModal();
-$('#btnSave').onclick = save;
-$('#btnSaveAs').onclick = saveAs;
-$('#btnOpen').onclick = openDialog;
+$('#btnSave').onclick = saveAs;
+$('#btnOpen').onclick = openFile;
 $('#btnNew').onclick = newLayout;
-$('#btnExport').onclick = saveToFile;
-$('#btnImport').onclick = () => $('#fileImport').click();
 $('#fileImport').onchange = async (e) => {
   const f = e.target.files[0]; if (!f) return;
-  try { await loadDoc(JSON.parse(await f.text())); S.savedName = null; S.dirty = true; updateStatus(); } catch (err) { toast('Open failed: ' + err.message, 5000); }
+  try { await loadDoc(JSON.parse(await f.text())); S.dirty = false; updateStatus(); } catch (err) { toast('Open failed: ' + err.message, 5000); }
   e.target.value = '';
 };
 $('#layoutName').addEventListener('change', () => { S.dirty = true; updateStatus(); });
@@ -1057,8 +1220,7 @@ window.addEventListener('beforeunload', (e) => { if (!native && S.dirty && S.par
 // API for the macOS app menus
 const inField = () => document.activeElement?.matches?.('input, textarea');
 window.stlApp = {
-  newLayout, open: openDialog, save, saveAs, saveToFile, openFile: () => $('#btnImport').click(),
-  exportJson: saveToFile, importJson: () => $('#btnImport').click(),
+  newLayout, open: openFile, openFile, save: saveAs, saveAs, saveToFile: saveAs,
   undo: () => (inField() ? document.execCommand('undo') : undo()),
   redo: () => (inField() ? document.execCommand('redo') : redo()),
   rotate: (d) => rotateSelection(d ?? step()),
@@ -1080,7 +1242,7 @@ window.stlApp = {
   await selectLib(lib);
   if (saved && (saved.parts?.length || saved.shapes?.length)) {
     await loadDoc(saved, { keepView: !!saved.view }).catch(() => {});
-    S.savedName = saved.savedName || null; S.dirty = !!saved.dirty;
+    S.dirty = !!saved.dirty;
     if (saved.view) { S.view = saved.view; applyView(); }
   }
   updateStatus();

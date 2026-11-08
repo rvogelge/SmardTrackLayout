@@ -202,6 +202,8 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
     init(store: Store) {
         let cfg = WKWebViewConfiguration()
         cfg.setURLSchemeHandler(SchemeHandler(store: store), forURLScheme: scheme)
+        // the self-test must never touch the user's autosaved work
+        if ProcessInfo.processInfo.environment["STL_SELFTEST"] != nil { cfg.websiteDataStore = .nonPersistent() }
         let ucc = WKUserContentController()
         cfg.userContentController = ucc
         webView = WKWebView(frame: .zero, configuration: cfg)
@@ -237,12 +239,8 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
         const click = async pn => { [...document.querySelectorAll('.pitem')].find(b => b.querySelector('.pn').textContent === pn).click(); await new Promise(r => setTimeout(r, 30)); };
         for (const pn of ['24130','24130','24130','24130','24130','24130','24188','24130','24130','24130','24130','24130','24130','24188']) await click(pn);
         const counts = document.querySelector('#stCounts').textContent;
-        document.querySelector('#layoutName').value = 'Selftest';
-        await stlApp.save(); await new Promise(r => setTimeout(r, 200));
-        const list = await (await fetch('api/layouts')).json();
         const lib = await (await fetch('api/library?file=' + encodeURIComponent('HO-Piko-A.xtp'))).text();
-        await fetch('api/layouts/Selftest', { method: 'DELETE' });
-        return JSON.stringify({ counts, saved: list.map(l => l.name), piko: lib.split('\\n')[0], toast: document.querySelector('#toast').textContent });
+        return JSON.stringify({ counts, piko: lib.split('\\n')[0], hasSaveAs: typeof stlApp.saveAs });
         """
         webView.callAsyncJavaScript(test, arguments: [:], in: nil, in: .page) { r in
             switch r {
@@ -309,7 +307,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }
 
     @objc func cmd(_ sender: NSMenuItem) { if let c = sender.representedObject as? String { wc.js(c) } }
-    @objc func showLayoutsFolder(_ s: Any?) { NSWorkspace.shared.activateFileViewerSelecting([store.layouts]) }
     @objc func openXTrackCAD(_ s: Any?) { NSWorkspace.shared.open(URL(string: "https://sourceforge.net/p/xtrkcad-fork/xtrkcad/")!) }
 
     private func item(_ title: String, _ js: String, _ key: String = "", _ mods: NSEvent.ModifierFlags = .command) -> NSMenuItem {
@@ -330,19 +327,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSMenuItem(title: "Hide \(appName)", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h"),
             NSMenuItem(title: "Quit \(appName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"),
         ])
-        let folder = NSMenuItem(title: "Show Layouts Folder in Finder", action: #selector(showLayoutsFolder(_:)), keyEquivalent: "")
-        folder.target = self
         _ = sub("File", [
             item("New Layout", "stlApp.newLayout()", "n"),
-            item("Open…", "stlApp.open()", "o"),
-            .separator(),
-            item("Save", "stlApp.save()", "s"),
-            item("Save As…", "stlApp.saveAs()", "s", [.command, .shift]),
-            .separator(),
-            item("Open File…", "stlApp.openFile()", "o", [.command, .shift]),
-            item("Save to File…", "stlApp.saveToFile()", "s", [.command, .option]),
-            .separator(),
-            folder,
+            item("Open…", "stlApp.openFile()", "o"),
+            item("Save As…", "stlApp.saveAs()", "s"),
             .separator(),
             NSMenuItem(title: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"),
         ])
