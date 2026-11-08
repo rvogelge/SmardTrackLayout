@@ -14,6 +14,14 @@
 export const LANGS = { en: 'English', de: 'Deutsch', fr: 'Français', it: 'Italiano', es: 'Español' };
 
 const en = {
+  layers: 'Layers', 'layers.title': 'Show or hide the layer pane', 'layer.add': 'Add layer', 'layer.n': 'Layer {n}',
+  'layer.show': 'Show / hide this layer', 'layer.lock': 'Lock / unlock this layer (locked elements cannot be marked or moved)',
+  'layer.activeFixed': 'The active layer is always visible and unlocked', 'layer.activate': 'Click to make this the active layer: new elements are placed on it',
+  'layer.rename': 'Rename (or double-click the name)', 'layer.delete': 'Remove layer', 'layer.moveHere': 'Move the marked elements to this layer',
+  'layer.hint': 'New elements go onto the active (highlighted) layer. To change the layer of elements, mark them and click ⇥ in the row of the target layer.',
+  'layer.confirmDelete': 'Remove layer “{name}”? Its {n} element(s) move to layer “{target}”.',
+  'layer.moved': '{n} element(s) moved to “{name}”', 'layer.count': '{n} element(s) on this layer', 'layer.info': 'layer “{name}”',
+  'help.12': '<b>Layers</b> (pane on the right, <b>Layers</b> button shows/hides it): new elements go onto the active layer; click a layer to activate it. <b>+</b> adds a layer, the pencil or a double-click renames it, the bin removes it (its elements move to another layer). Mark elements and click ⇥ in a layer row to move them there. The eye hides a layer, the lock protects it against marking and moving.',
   'name.title': 'Layout name', untitled: 'Untitled',
   new: 'New', 'new.title': 'New layout',
   open: 'Open…', 'open.title': 'Open a layout file (Ctrl+O)',
@@ -93,6 +101,14 @@ const en = {
 };
 
 const de = {
+  layers: 'Ebenen', 'layers.title': 'Ebenenbereich ein-/ausblenden', 'layer.add': 'Ebene hinzufügen', 'layer.n': 'Ebene {n}',
+  'layer.show': 'Ebene ein-/ausblenden', 'layer.lock': 'Ebene sperren/entsperren (gesperrte Elemente lassen sich nicht markieren oder verschieben)',
+  'layer.activeFixed': 'Die aktive Ebene ist immer sichtbar und entsperrt', 'layer.activate': 'Klicken, um diese Ebene zu aktivieren: neue Elemente landen auf ihr',
+  'layer.rename': 'Umbenennen (oder Doppelklick auf den Namen)', 'layer.delete': 'Ebene entfernen', 'layer.moveHere': 'Markierte Elemente auf diese Ebene verschieben',
+  'layer.hint': 'Neue Elemente kommen auf die aktive (hervorgehobene) Ebene. Um Elemente einer anderen Ebene zuzuordnen, markiere sie und klicke ⇥ in der Zeile der Zielebene.',
+  'layer.confirmDelete': 'Ebene „{name}“ entfernen? Ihre {n} Element(e) kommen auf die Ebene „{target}“.',
+  'layer.moved': '{n} Element(e) auf „{name}“ verschoben', 'layer.count': '{n} Element(e) auf dieser Ebene', 'layer.info': 'Ebene „{name}“',
+  'help.12': '<b>Ebenen</b> (Bereich rechts, der Knopf <b>Ebenen</b> blendet ihn ein/aus): neue Elemente kommen auf die aktive Ebene; Klick auf eine Ebene aktiviert sie. <b>+</b> fügt eine Ebene hinzu, der Stift oder ein Doppelklick benennt sie um, der Papierkorb entfernt sie (ihre Elemente kommen auf eine andere Ebene). Elemente markieren und ⇥ in einer Ebenenzeile klicken verschiebt sie dorthin. Das Auge blendet eine Ebene aus, das Schloss schützt sie vor Markieren und Verschieben.',
   'name.title': 'Name des Gleisplans', untitled: 'Unbenannt',
   new: 'Neu', 'new.title': 'Neuer Gleisplan',
   open: 'Öffnen…', 'open.title': 'Gleisplan-Datei öffnen (Strg+O)',
@@ -172,6 +188,14 @@ const de = {
 };
 
 const fr = {
+  layers: 'Calques', 'layers.title': 'Afficher ou masquer le panneau des calques', 'layer.add': 'Ajouter un calque', 'layer.n': 'Calque {n}',
+  'layer.show': 'Afficher / masquer ce calque', 'layer.lock': 'Verrouiller / déverrouiller ce calque (les éléments verrouillés ne peuvent être ni sélectionnés ni déplacés)',
+  'layer.activeFixed': 'Le calque actif est toujours visible et déverrouillé', 'layer.activate': 'Cliquer pour en faire le calque actif : les nouveaux éléments y sont placés',
+  'layer.rename': 'Renommer (ou double-cliquer le nom)', 'layer.delete': 'Supprimer le calque', 'layer.moveHere': 'Déplacer les éléments sélectionnés sur ce calque',
+  'layer.hint': 'Les nouveaux éléments vont sur le calque actif (mis en évidence). Pour changer le calque d’éléments, sélectionnez-les et cliquez ⇥ dans la ligne du calque cible.',
+  'layer.confirmDelete': 'Supprimer le calque « {name} » ? Ses {n} élément(s) passent sur le calque « {target} ».',
+  'layer.moved': '{n} élément(s) déplacé(s) sur « {name} »', 'layer.count': '{n} élément(s) sur ce calque', 'layer.info': 'calque « {name} »',
+  'help.12': '<b>Calques</b> (panneau à droite, le bouton <b>Calques</b> l’affiche/le masque) : les nouveaux éléments vont sur le calque actif ; cliquez un calque pour l’activer. <b>+</b> ajoute un calque, le crayon ou un double-clic le renomme, la corbeille le supprime (ses éléments passent sur un autre calque). Sélectionnez des éléments et cliquez ⇥ dans la ligne d’un calque pour les y déplacer. L’œil masque un calque, le cadenas le protège contre la sélection et le déplacement.',
   'name.title': 'Nom du plan', untitled: 'Sans titre',
   new: 'Nouveau', 'new.title': 'Nouveau plan',
   open: 'Ouvrir…', 'open.title': 'Ouvrir un fichier de plan (Ctrl+O)',
@@ -251,6 +275,14 @@ const fr = {
 };
 
 const it = {
+  layers: 'Livelli', 'layers.title': 'Mostra o nascondi il pannello dei livelli', 'layer.add': 'Aggiungi livello', 'layer.n': 'Livello {n}',
+  'layer.show': 'Mostra / nascondi questo livello', 'layer.lock': 'Blocca / sblocca questo livello (gli elementi bloccati non si possono selezionare né spostare)',
+  'layer.activeFixed': 'Il livello attivo è sempre visibile e sbloccato', 'layer.activate': 'Clicca per renderlo il livello attivo: i nuovi elementi vengono posati su di esso',
+  'layer.rename': 'Rinomina (o doppio clic sul nome)', 'layer.delete': 'Rimuovi livello', 'layer.moveHere': 'Sposta gli elementi selezionati su questo livello',
+  'layer.hint': 'I nuovi elementi vanno sul livello attivo (evidenziato). Per cambiare il livello di alcuni elementi, selezionali e clicca ⇥ nella riga del livello di destinazione.',
+  'layer.confirmDelete': 'Rimuovere il livello «{name}»? I suoi {n} elementi passano al livello «{target}».',
+  'layer.moved': '{n} elemento/i spostato/i su «{name}»', 'layer.count': '{n} elemento/i su questo livello', 'layer.info': 'livello «{name}»',
+  'help.12': '<b>Livelli</b> (pannello a destra, il pulsante <b>Livelli</b> lo mostra/nasconde): i nuovi elementi vanno sul livello attivo; clicca un livello per attivarlo. <b>+</b> aggiunge un livello, la matita o un doppio clic lo rinomina, il cestino lo rimuove (i suoi elementi passano a un altro livello). Seleziona elementi e clicca ⇥ nella riga di un livello per spostarli lì. L’occhio nasconde un livello, il lucchetto lo protegge da selezione e spostamento.',
   'name.title': 'Nome del tracciato', untitled: 'Senza titolo',
   new: 'Nuovo', 'new.title': 'Nuovo tracciato',
   open: 'Apri…', 'open.title': 'Apri un file di tracciato (Ctrl+O)',
@@ -330,6 +362,14 @@ const it = {
 };
 
 const es = {
+  layers: 'Capas', 'layers.title': 'Mostrar u ocultar el panel de capas', 'layer.add': 'Añadir capa', 'layer.n': 'Capa {n}',
+  'layer.show': 'Mostrar / ocultar esta capa', 'layer.lock': 'Bloquear / desbloquear esta capa (los elementos bloqueados no se pueden seleccionar ni mover)',
+  'layer.activeFixed': 'La capa activa siempre está visible y desbloqueada', 'layer.activate': 'Haz clic para que sea la capa activa: los elementos nuevos se colocan en ella',
+  'layer.rename': 'Renombrar (o doble clic en el nombre)', 'layer.delete': 'Eliminar capa', 'layer.moveHere': 'Mover los elementos seleccionados a esta capa',
+  'layer.hint': 'Los elementos nuevos van a la capa activa (resaltada). Para cambiar la capa de unos elementos, selecciónalos y haz clic en ⇥ en la fila de la capa de destino.',
+  'layer.confirmDelete': '¿Eliminar la capa «{name}»? Sus {n} elemento(s) pasan a la capa «{target}».',
+  'layer.moved': '{n} elemento(s) movido(s) a «{name}»', 'layer.count': '{n} elemento(s) en esta capa', 'layer.info': 'capa «{name}»',
+  'help.12': '<b>Capas</b> (panel a la derecha, el botón <b>Capas</b> lo muestra/oculta): los elementos nuevos van a la capa activa; haz clic en una capa para activarla. <b>+</b> añade una capa, el lápiz o un doble clic la renombra, la papelera la elimina (sus elementos pasan a otra capa). Selecciona elementos y haz clic en ⇥ en la fila de una capa para moverlos allí. El ojo oculta una capa, el candado la protege contra selección y movimiento.',
   'name.title': 'Nombre de la maqueta', untitled: 'Sin título',
   new: 'Nueva', 'new.title': 'Nueva maqueta',
   open: 'Abrir…', 'open.title': 'Abrir un archivo de maqueta (Ctrl+O)',

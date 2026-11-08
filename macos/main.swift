@@ -90,6 +90,7 @@ let menuTexts: [String: [String]] = [
     "Zoom to Fit": ["Alles einpassen", "Tout afficher", "Mostra tutto", "Ver todo"],
     "Toggle Part Labels": ["Artikelnummern ein/aus", "Afficher/masquer les références", "Mostra/nascondi codici", "Mostrar/ocultar referencias"],
     "Parts List": ["Stückliste", "Liste des pièces", "Distinta dei pezzi", "Lista de piezas"],
+    "Show/Hide Layers": ["Ebenen ein-/ausblenden", "Afficher/masquer les calques", "Mostra/nascondi livelli", "Mostrar/ocultar capas"],
     "Enter Full Screen": ["Vollbildmodus", "Plein écran", "Modalità a tutto schermo", "Pantalla completa"],
     "Window": ["Fenster", "Fenêtre", "Finestra", "Ventana"],
     "Minimize": ["Im Dock ablegen", "Placer dans le Dock", "Contrai", "Minimizar"],
@@ -629,6 +630,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item(L("Zoom to Fit"), "stlApp.fit()", "0"),
             item(L("Toggle Part Labels"), "stlApp.toggleLabels()", "l"),
             item(L("Parts List"), "stlApp.partsList()", "p", [.command, .shift]),
+            item(L("Show/Hide Layers"), "stlApp.toggleLayers()", "l", [.command, .option]),
             .separator(),
             NSMenuItem(title: L("Enter Full Screen"), action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f"),
         ]).items.last?.keyEquivalentModifierMask = [.command, .control]

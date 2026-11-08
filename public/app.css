@@ -289,3 +289,35 @@ form.settings { display: flex; flex-direction: column; gap: 14px; width: min(520
 .buildinfo { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0; }
 .buildinfo dt { color: var(--muted); }
 .buildinfo dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+/* layers pane */
+body.with-layers { grid-template-columns: 280px 1fr 250px; grid-template-areas: "top top top" "side stage layers" "status status status"; }
+.layerspane { grid-area: layers; display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: auto;
+  padding: 10px; background: var(--panel); border-left: 1px solid var(--border); }
+.lphead { display: flex; align-items: center; gap: 4px; }
+.lphead strong { flex: 1; }
+.layerlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.lrow { display: flex; align-items: center; gap: 2px; padding: 2px 4px; border-radius: 6px; border: 1px solid transparent; cursor: pointer; }
+.lrow:hover { background: var(--btn-hover); }
+.lrow.cur { background: var(--accent-soft); border-color: var(--accent); }
+.lrow.off .lname { color: var(--muted); font-style: italic; }
+.lname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; }
+.lrow.hassel .lname::after { content: " ●"; color: var(--accent); font-size: 10px; }
+.lcount { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; min-width: 18px; text-align: right; }
+.lrename { flex: 1; min-width: 0; font: inherit; padding: 2px 4px; border: 1px solid var(--accent); border-radius: 4px; background: var(--bg); color: var(--text); }
+button.licon { min-height: 24px; padding: 2px 3px; border-color: transparent; background: transparent; display: inline-flex; align-items: center; justify-content: center; }
+button.licon:hover:not(:disabled) { background: var(--btn); border-color: var(--border); }
+button.licon:disabled { opacity: .3; }
+button.licon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+/* row actions appear on hover (and on the active row), so names have room */
+.lrow:not(:hover):not(.cur) :is([data-act="here"], [data-act="rename"], [data-act="del"]) { display: none; }
+.lrow:not(:hover) [data-act="here"]:disabled { display: none; }
+button.licon.add { font-size: 18px; line-height: 1; width: 28px; }
+.lphint { margin: 4px 2px 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+#btnLayers.on { background: var(--accent-soft); border-color: var(--accent); }
+.lhidden { display: none; }
+.llocked { pointer-events: none; opacity: .55; }
+@media (max-width: 760px) {
+  body.with-layers { grid-template-columns: 1fr; grid-template-rows: auto 38vh 1fr auto auto; grid-template-areas: "top" "side" "stage" "layers" "status"; }
+  .layerspane { border-left: 0; border-top: 1px solid var(--border); max-height: 30vh; }
+}

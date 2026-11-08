@@ -33,6 +33,7 @@ const S = window.__stl = {
   labels: false, drag: null, snap: null,
   tool: 'select', draft: null, typed: '', cursor: null, space: false,
   grid: 10, autoDim: true, dirty: false, lastPanMoved: false,
+  layers: [{ id: 1, name: 'Layer 1', visible: true, locked: false }], curLayer: 1,
 };
 
 // ---------------------------------------------------------------- utilities
@@ -74,6 +75,26 @@ const byId = (id) => S.parts.find((p) => p.id === id);
 const shapeById = (id) => S.shapes.find((s) => s.id === id);
 const itemById = (id) => byId(id) || shapeById(id);
 const selectedItems = () => [...S.parts, ...S.shapes].filter((it) => S.sel.has(it.id));
+
+// layers: every part and shape has a layer id; hidden layers are not drawn, locked ones cannot be selected
+const layerById = (id) => S.layers.find((l) => l.id === id);
+const layerOf = (it) => layerById(it.layer) || S.layers[0];
+const isVisible = (it) => layerOf(it).visible !== false;
+const isEditable = (it) => { const l = layerOf(it); return l.visible !== false && !l.locked; };
+const editableItems = () => [...S.parts, ...S.shapes].filter(isEditable);
+function fixLayers() {
+  if (!Array.isArray(S.layers) || !S.layers.length) S.layers = [{ id: 1, name: tr('layer.n', { n: 1 }), visible: true, locked: false }];
+  const ids = new Set(S.layers.map((l) => l.id));
+  for (const it of [...S.parts, ...S.shapes]) if (!ids.has(it.layer)) it.layer = S.layers[0].id;
+  if (!ids.has(S.curLayer)) S.curLayer = S.layers[0].id;
+  const cur = layerById(S.curLayer); cur.visible = true; cur.locked = false; // the active layer is always usable
+}
+// drop marking / the active end on items that became hidden or locked
+function pruneForLayers() {
+  for (const id of [...S.sel]) { const it = itemById(id); if (!it || !isEditable(it)) S.sel.delete(id); }
+  if (S.active && !isVisible(byId(S.active.pid) || {})) S.active = null;
+  if (S.lastPlace && !S.sel.has(S.lastPlace.pid)) S.lastPlace = null;
+}
 
 function bboxOf(points) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -254,8 +275,10 @@ function buildPartEl(p) {
     for (const [cls, dd] of [['fill', P.fill], ['outline', P.outline], ['ties', P.ties], ['rails', P.rails]]) if (dd) g.append(el('path', { class: cls, d: dd }));
   }
   setPose(g, p);
+  layerClasses(g, p);
   return g;
 }
+function layerClasses(g, it) { g.classList.toggle('lhidden', !isVisible(it)); g.classList.toggle('llocked', isVisible(it) && !isEditable(it)); }
 
 const ptsD = (pts, close) => 'M' + pts.map(([x, y]) => f3(x) + ' ' + f3(y)).join('L') + (close ? 'Z' : '');
 function circleD([cx, cy], r) { return `M${f3(cx - r)} ${f3(cy)}a${f3(r)} ${f3(r)} 0 1 0 ${f3(2 * r)} 0a${f3(r)} ${f3(r)} 0 1 0 ${f3(-2 * r)} 0Z`; }
@@ -292,6 +315,7 @@ function buildShapeEl(s) {
     if (isRect(s)) { g.classList.add('rect'); g.append(el('path', { class: 'hitfill', d })); }
     g.append(el('path', { class: 'hit', d }), el('path', { class: 'stroke', d }));
   }
+  if (s.id > 0) layerClasses(g, s);
   return g;
 }
 
@@ -327,8 +351,9 @@ function renderSelection() {
 function renderOverlay() {
   overlay.innerHTML = '';
   const z = S.view.z, r = 4.5 / z, len = 13 / z;
+  const hidden = new Set(S.parts.filter((p) => !isVisible(p)).map((p) => p.id));
   for (const e of S.allEnds) {
-    if (S.conn.has(endKey(e.pid, e.i))) continue;
+    if (S.conn.has(endKey(e.pid, e.i)) || hidden.has(e.pid)) continue;
     const isActive = S.active && S.active.pid === e.pid && S.active.i === e.i;
     const g = el('g', { class: 'end' + (isActive ? ' active' : ''), 'data-pid': e.pid, 'data-i': e.i });
     const dx = Math.sin(rad(e.a)), dy = Math.cos(rad(e.a));
@@ -340,7 +365,7 @@ function renderOverlay() {
   if (S.snap) overlay.append(el('circle', { class: 'snapring', cx: S.snap.x, cy: S.snap.y, r: 10 / z }));
   if (S.labels) {
     for (const p of S.parts) {
-      const d = def(p); if (!d || !d.partno) continue;
+      const d = def(p); if (!d || !d.partno || hidden.has(p.id)) continue;
       const [x, y] = itemCenter(p);
       const t = el('text', { class: 'label', transform: `translate(${x} ${y}) scale(${1 / z} ${-1 / z})` });
       t.textContent = d.partno; overlay.append(t);
@@ -398,10 +423,12 @@ function updateStatus() {
     const it = itemById([...S.sel][0]);
     if (it?.pts) hint = shapeInfo(it);
     else { const d = it && def(it); if (d) hint = `${d.desc}${d.partno ? ' · ' + d.partno : ''} · ${d.mfr} · ${f3(it.rot)}°`; }
+    if (it && S.layers.length > 1) hint += ' · ' + tr('layer.info', { name: layerOf(it).name });
   } else if (!S.active && S.parts.length) hint = tr('hint.pickEnd');
   $('#stHint').textContent = hint;
   document.title = `${S.dirty ? '• ' : ''}${$('#layoutName').value || tr('untitled')} — SmardTrackLayout`;
   renderProps();
+  renderLayers();
   scheduleAutosave();
 }
 
@@ -421,10 +448,16 @@ function shapeInfo(s) {
 const refresh = () => { computeConnections(); renderSelection(); renderOverlay(); renderUI(); updateStatus(); };
 
 // ---------------------------------------------------------------- history
-const snapshot = () => JSON.stringify({ parts: S.parts, shapes: S.shapes, nextId: S.nextId });
+const snapshot = () => JSON.stringify({ parts: S.parts, shapes: S.shapes, nextId: S.nextId, layers: S.layers, curLayer: S.curLayer });
 function pushUndo() { S.undo.push(snapshot()); if (S.undo.length > 200) S.undo.shift(); S.redo = []; S.dirty = true; }
 function restore(snap) {
   const o = JSON.parse(snap); S.parts = o.parts; S.shapes = o.shapes || []; S.nextId = o.nextId;
+  if (o.layers) { // keep what is currently shown / locked: that is view state, not part of the history
+    const now = new Map(S.layers.map((l) => [l.id, l]));
+    S.layers = o.layers.map((l) => (now.has(l.id) ? { ...l, visible: now.get(l.id).visible, locked: now.get(l.id).locked } : l));
+    S.curLayer = o.curLayer;
+  }
+  fixLayers(); pruneForLayers();
   S.sel = new Set([...S.sel].filter((id) => itemById(id))); S.lastPlace = null; S.dirty = true;
   renderAll();
 }
@@ -455,7 +488,7 @@ async function placePart(libFile, title, at = null) {
   const lib = await loadLib(libFile);
   const d = lib.byTitle.get(title); if (!d) return;
   pushUndo();
-  const p = { id: S.nextId++, lib: libFile, title, x: 0, y: 0, rot: 0 };
+  const p = { id: S.nextId++, lib: libFile, title, x: 0, y: 0, rot: 0, layer: S.curLayer };
   let anchor = null;
   if (!at && S.active && d.endpoints.length) anchor = S.allEnds.find((e) => e.pid === S.active.pid && e.i === S.active.i);
   let attachedIdx = -1;
@@ -516,6 +549,7 @@ function findSnap(movingIds) {
   const staticFree = [], movingFree = [];
   for (const p of S.parts) {
     const isMoving = movingIds.has(p.id);
+    if (!isMoving && !isVisible(p)) continue;
     for (const e of ends(p)) {
       const o = S.conn.get(endKey(p.id, e.i));
       const otherMoving = o && movingIds.has(o.pid);
@@ -553,12 +587,13 @@ function snapPoint(wx, wy, exclude = -1) {
   const tol = PICK_PX / S.view.z;
   let best = null, bd = tol;
   const consider = (x, y) => { const d = Math.hypot(x - wx, y - wy); if (d < bd) { bd = d; best = { x, y, kind: 'vertex' }; } };
+  const hiddenParts = new Set(S.parts.filter((p) => !isVisible(p)).map((p) => p.id));
   for (const s of S.shapes) {
-    if (s.id === exclude) continue;
+    if (s.id === exclude || !isVisible(s)) continue;
     if (s.type === 'dim') s.pts.forEach(([x, y]) => consider(x, y));
     else if (s.type !== 'text') s.pts.forEach(([x, y]) => consider(x, y));
   }
-  for (const e of S.allEnds) consider(e.x, e.y);
+  for (const e of S.allEnds) if (!hiddenParts.has(e.pid)) consider(e.x, e.y);
   if (S.draft && S.draft.pts.length >= 2) consider(...S.draft.pts[0]);
   if (best) return best;
   if (S.grid > 0) { const g = S.grid / MM; return { x: Math.round(wx / g) * g, y: Math.round(wy / g) * g, kind: 'grid' }; }
@@ -578,7 +613,7 @@ function draftPoint(ev) {
 }
 
 function addShape(s) {
-  s.id = S.nextId++; S.shapes.push(s); return s;
+  s.id = S.nextId++; s.layer ??= S.curLayer; S.shapes.push(s); return s;
 }
 // rectangles: closed 4-point polys, counter-clockwise from the lower-left corner,
 // so edge 0 = width (bottom), edge 1 = height (right); negative dim offsets lie outside
@@ -951,7 +986,7 @@ function cancelBox() { showBox(false); clearPresel(); S.drag = null; }
 function boxHits(D) {
   const x0 = Math.min(D.wx, D.wx2), x1 = Math.max(D.wx, D.wx2), y0 = Math.min(D.wy, D.wy2), y1 = Math.max(D.wy, D.wy2);
   const crossing = D.wx2 < D.wx, hits = new Set();
-  for (const it of [...S.parts, ...S.shapes]) {
+  for (const it of editableItems()) {
     const b = itemBBox(it);
     const inside = b.x0 >= x0 && b.x1 <= x1 && b.y0 >= y0 && b.y1 <= y1;
     const touch = b.x1 >= x0 && b.x0 <= x1 && b.y1 >= y0 && b.y0 <= y1;
@@ -1105,7 +1140,7 @@ svg.addEventListener('dblclick', (ev) => {
   const id = +itemEl.dataset.id, s = shapeById(id);
   if (s?.type === 'text') { openTextDialog(s); return; }
   if (s) return;
-  S.sel = connectedGroup(id); renderSelection(); renderUI(); updateStatus();
+  S.sel = new Set([...connectedGroup(id)].filter((pid) => isEditable(byId(pid)))); renderSelection(); renderUI(); updateStatus();
 });
 
 // zoom by factor k keeping the screen point (sx, sy) fixed
@@ -1152,7 +1187,8 @@ svg.addEventListener('drop', (ev) => {
 
 function fitView() {
   const r = svg.getBoundingClientRect();
-  const b = unionBBox([...S.parts, ...S.shapes]);
+  const all = [...S.parts, ...S.shapes], vis = all.filter(isVisible);
+  const b = unionBBox(vis.length ? vis : all);
   if (!b) { S.view = { tx: r.width / 2, ty: r.height / 2, z: 12 }; applyView(); return; }
   const z = Math.min(200, Math.max(0.6, Math.min(r.width / (b.x1 - b.x0 + 6), r.height / (b.y1 - b.y0 + 6))));
   S.view = { z, tx: r.width / 2 - z * (b.x0 + b.x1) / 2, ty: r.height / 2 + z * (b.y0 + b.y1) / 2 };
@@ -1169,7 +1205,7 @@ function clipData(items) {
   for (const d of S.shapes) if (d.ref && ids.has(d.ref.shape)) ids.add(d.id); // linked dimensions come along
   return {
     format: 'smardtracklayout-clipboard', version: 1,
-    parts: S.parts.filter((p) => ids.has(p.id)).map(({ id, lib, title, x, y, rot }) => ({ id, lib, title, x, y, rot })),
+    parts: S.parts.filter((p) => ids.has(p.id)).map(({ id, lib, title, x, y, rot, layer }) => ({ id, lib, title, x, y, rot, layer })),
     shapes: clone(S.shapes.filter((x) => ids.has(x.id))),
   };
 }
@@ -1196,8 +1232,8 @@ async function pasteClip({ atCursor = true, data = readClip() } = {}) {
   await Promise.all([...new Set(data.parts.map((p) => p.lib))].map((f) => loadLib(f).catch(() => null)));
   pushUndo();
   const idMap = new Map(), added = [];
-  for (const p of data.parts) { const n = { id: S.nextId++, lib: p.lib, title: p.title, x: p.x, y: p.y, rot: p.rot }; idMap.set(p.id, n.id); S.parts.push(n); added.push(n); }
-  for (const sh of data.shapes) { const n = { ...clone(sh), id: S.nextId++ }; idMap.set(sh.id, n.id); S.shapes.push(n); added.push(n); }
+  for (const p of data.parts) { const n = { id: S.nextId++, lib: p.lib, title: p.title, x: p.x, y: p.y, rot: p.rot, layer: S.curLayer }; idMap.set(p.id, n.id); S.parts.push(n); added.push(n); }
+  for (const sh of data.shapes) { const n = { ...clone(sh), id: S.nextId++, layer: S.curLayer }; idMap.set(sh.id, n.id); S.shapes.push(n); added.push(n); }
   for (const n of added) if (n.ref) { const id = idMap.get(n.ref.shape); if (id) n.ref = { ...n.ref, shape: id }; else delete n.ref; }
   // where: at the mouse pointer if it moved since copying, otherwise a little offset (cascading)
   const b = unionBBox(added), cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
@@ -1257,7 +1293,7 @@ document.addEventListener('keydown', (ev) => {
     if (k === 'v' && hasClip()) { ev.preventDefault(); pasteClip(); return; }
     if (k === 'd') { ev.preventDefault(); duplicateSelection(); return; }
   }
-  if (mod && k === 'a') { ev.preventDefault(); setTool('select'); S.sel = new Set([...S.parts, ...S.shapes].map((it) => it.id)); renderSelection(); renderUI(); updateStatus(); return; }
+  if (mod && k === 'a') { ev.preventDefault(); setTool('select'); S.sel = new Set(editableItems().map((it) => it.id)); renderSelection(); renderUI(); updateStatus(); return; }
   if (mod) return;
   if (k === ' ') { S.space = true; return; }
 
@@ -1286,6 +1322,130 @@ document.addEventListener('keydown', (ev) => {
 document.addEventListener('keyup', (ev) => { if (ev.key === ' ') S.space = false; });
 const step = () => { const v = parseFloat(String($('#rotStep').value).replace(',', '.')); return v > 0 ? v : 15; };
 
+
+// ---------------------------------------------------------------- layers pane
+const ICON = {
+  eye: '<svg viewBox="0 0 20 20"><path d="M1.5 10S5 4 10 4s8.5 6 8.5 6-3.5 6-8.5 6S1.5 10 1.5 10z"/><circle cx="10" cy="10" r="2.6"/></svg>',
+  eyeOff: '<svg viewBox="0 0 20 20"><path d="M1.5 10S5 4 10 4s8.5 6 8.5 6-3.5 6-8.5 6S1.5 10 1.5 10z" opacity=".35"/><path d="M3 17L17 3"/></svg>',
+  lock: '<svg viewBox="0 0 20 20"><rect x="4" y="9" width="12" height="8.5" rx="1.5"/><path d="M6.5 9V6.5a3.5 3.5 0 0 1 7 0V9"/></svg>',
+  unlock: '<svg viewBox="0 0 20 20" opacity=".45"><rect x="4" y="9" width="12" height="8.5" rx="1.5"/><path d="M6.5 9V6.5a3.5 3.5 0 0 1 6.8-1.2"/></svg>',
+  here: '<svg viewBox="0 0 20 20"><path d="M3 10h10M9 6l4 4-4 4M16 4v12"/></svg>',
+  pen: '<svg viewBox="0 0 20 20"><path d="M3 17l1-4L13.5 3.5l3 3L7 16z M11.5 5.5l3 3"/></svg>',
+  trash: '<svg viewBox="0 0 20 20"><path d="M3.5 5.5h13M8 5.5V3.5h4v2M5.5 5.5l1 11h7l1-11"/></svg>',
+};
+const layersPane = $('#layersPane'), layerList = $('#layerList');
+let layersKey = '', renaming = null;
+
+function layerCounts() {
+  const n = new Map(S.layers.map((l) => [l.id, 0]));
+  for (const it of [...S.parts, ...S.shapes]) n.set(layerOf(it).id, (n.get(layerOf(it).id) || 0) + 1);
+  return n;
+}
+function renderLayers() {
+  if (layersPane.hidden || renaming != null) return;
+  const counts = layerCounts(), selLayers = new Set(selectedItems().map((it) => layerOf(it).id));
+  const key = JSON.stringify([S.layers, S.curLayer, [...counts], [...selLayers], S.sel.size, document.documentElement.lang]);
+  if (key === layersKey) return;
+  layersKey = key;
+  const one = S.layers.length === 1;
+  layerList.innerHTML = S.layers.map((l) => {
+    const cur = l.id === S.curLayer, fixed = cur ? ` disabled title="${esc(tr('layer.activeFixed'))}"` : '';
+    return `<li class="lrow${cur ? ' cur' : ''}${l.visible === false ? ' off' : ''}${selLayers.has(l.id) ? ' hassel' : ''}" data-layer="${l.id}" title="${esc(tr('layer.activate'))}">
+      <button type="button" class="licon" data-act="vis"${fixed || ` title="${esc(tr('layer.show'))}"`}>${l.visible === false ? ICON.eyeOff : ICON.eye}</button>
+      <button type="button" class="licon" data-act="lock"${fixed || ` title="${esc(tr('layer.lock'))}"`}>${l.locked ? ICON.lock : ICON.unlock}</button>
+      <span class="lname">${esc(l.name)}</span>
+      <span class="lcount" title="${esc(tr('layer.count', { n: counts.get(l.id) || 0 }))}">${counts.get(l.id) || 0}</span>
+      <button type="button" class="licon" data-act="here" title="${esc(tr('layer.moveHere'))}"${S.sel.size ? '' : ' disabled'}>${ICON.here}</button>
+      <button type="button" class="licon" data-act="rename" title="${esc(tr('layer.rename'))}">${ICON.pen}</button>
+      <button type="button" class="licon" data-act="del" title="${esc(tr('layer.delete'))}"${one ? ' disabled' : ''}>${ICON.trash}</button>
+    </li>`;
+  }).join('');
+}
+const layersChanged = () => { layersKey = ''; S.dirty = true; pruneForLayers(); renderAll(); };
+
+function setActiveLayer(id) {
+  const l = layerById(id); if (!l || id === S.curLayer) return;
+  S.curLayer = id; l.visible = true; l.locked = false;
+  layersChanged();
+}
+function addLayer() {
+  pushUndo();
+  const id = Math.max(0, ...S.layers.map((l) => l.id)) + 1;
+  const names = new Set(S.layers.map((l) => l.name));
+  let n = S.layers.length + 1; while (names.has(tr('layer.n', { n }))) n++;
+  S.layers.push({ id, name: tr('layer.n', { n }), visible: true, locked: false });
+  S.curLayer = id;
+  layersChanged();
+  startRename(id);
+}
+function startRename(id) {
+  const li = layerList.querySelector(`[data-layer="${id}"]`), l = layerById(id); if (!li || !l) return;
+  renaming = id;
+  const span = li.querySelector('.lname'), inp = document.createElement('input');
+  inp.className = 'lrename'; inp.value = l.name; inp.maxLength = 60; inp.spellcheck = false;
+  span.replaceWith(inp); inp.focus(); inp.select();
+  let done = false;
+  const finish = (ok) => {
+    if (done) return; done = true; renaming = null;
+    const v = inp.value.trim();
+    if (ok && v && v !== l.name) { pushUndo(); l.name = v; S.dirty = true; }
+    layersKey = ''; renderLayers(); updateStatus();
+  };
+  inp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); finish(true); } else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); finish(false); } });
+  inp.addEventListener('blur', () => finish(true));
+}
+function deleteLayer(id) {
+  if (S.layers.length < 2) return;
+  const l = layerById(id), target = layerById(id !== S.curLayer ? S.curLayer : S.layers.find((x) => x.id !== id).id);
+  const n = layerCounts().get(id) || 0;
+  if (n && !confirm(tr('layer.confirmDelete', { name: l.name, n, target: target.name }))) return;
+  pushUndo();
+  for (const it of [...S.parts, ...S.shapes]) if (it.layer === id) it.layer = target.id;
+  S.layers = S.layers.filter((x) => x.id !== id);
+  if (S.curLayer === id) S.curLayer = target.id;
+  fixLayers(); layersChanged();
+}
+function moveSelectionToLayer(id) {
+  const l = layerById(id), items = selectedItems(); if (!l || !items.length) return;
+  const ids = new Set(items.map((it) => it.id));
+  for (const d of S.shapes) if (d.ref && ids.has(d.ref.shape)) ids.add(d.id); // linked dimensions go along
+  pushUndo();
+  let n = 0;
+  for (const it of [...S.parts, ...S.shapes]) if (ids.has(it.id) && it.layer !== id) { it.layer = id; n++; }
+  toast(tr('layer.moved', { n, name: l.name }));
+  layersChanged();
+}
+function toggleLayerFlag(id, flag) {
+  const l = layerById(id); if (!l || id === S.curLayer) return;
+  if (flag === 'visible') l.visible = l.visible === false; else l.locked = !l.locked;
+  layersChanged();
+}
+layerList.addEventListener('click', (ev) => {
+  const li = ev.target.closest('[data-layer]'); if (!li || ev.target.closest('input')) return;
+  const id = +li.dataset.layer, act = ev.target.closest('[data-act]')?.dataset.act;
+  if (act === 'vis') toggleLayerFlag(id, 'visible');
+  else if (act === 'lock') toggleLayerFlag(id, 'locked');
+  else if (act === 'here') moveSelectionToLayer(id);
+  else if (act === 'rename') startRename(id);
+  else if (act === 'del') deleteLayer(id);
+  else setActiveLayer(id);
+});
+layerList.addEventListener('dblclick', (ev) => { const li = ev.target.closest('[data-layer]'); if (li && ev.target.closest('.lname')) startRename(+li.dataset.layer); });
+$('#layerAdd').onclick = addLayer;
+
+function showLayersPane(on) {
+  layersPane.hidden = !on;
+  document.body.classList.toggle('with-layers', on);
+  $('#btnLayers').classList.toggle('on', on);
+  $('#btnLayers').setAttribute('aria-pressed', String(on));
+  try { localStorage.setItem('stl.layersPane', on ? '1' : '0'); } catch { /* ignore */ }
+  layersKey = ''; renderLayers(); applyView();
+}
+const toggleLayersPane = () => showLayersPane(layersPane.hidden);
+$('#btnLayers').onclick = toggleLayersPane;
+$('#layersClose').onclick = () => showLayersPane(false);
+{ let on = true; try { on = localStorage.getItem('stl.layersPane') !== '0'; } catch { /* ignore */ } layersPane.hidden = !on; document.body.classList.toggle('with-layers', on); $('#btnLayers').classList.toggle('on', on); }
+
 // ---------------------------------------------------------------- persistence
 const native = window.webkit?.messageHandlers?.stl; // running inside the macOS app?
 const layoutName = () => $('#layoutName').value.trim() || tr('untitled');
@@ -1293,9 +1453,11 @@ const layoutName = () => $('#layoutName').value.trim() || tr('untitled');
 function layoutDoc() {
   const r = (v) => +v.toFixed(5);
   return {
-    format: 'smardtracklayout', version: 3, name: layoutName(), units: 'inch',
+    format: 'smardtracklayout', version: 4, name: layoutName(), units: 'inch',
     libraries: [...new Set(S.parts.map((p) => p.lib))],
-    parts: S.parts.map(({ lib, title, x, y, rot }) => ({ lib, title, x: r(x), y: r(y), rot: +rot.toFixed(4) })),
+    layers: S.layers.map(({ id, name, visible, locked }) => ({ id, name, visible: visible !== false, locked: !!locked })),
+    activeLayer: S.curLayer,
+    parts: S.parts.map(({ lib, title, x, y, rot, layer }) => ({ lib, title, x: r(x), y: r(y), rot: +rot.toFixed(4), layer })),
     shapes: S.shapes.map(({ pts, ...rest }) => ({ ...rest, pts: pts.map(([x, y]) => [r(x), r(y)]) })),
   };
 }
@@ -1305,16 +1467,23 @@ async function loadDoc(doc, { keepView = false } = {}) {
   const libs = [...new Set(doc.parts.map((p) => p.lib))];
   const failed = [];
   await Promise.all(libs.map((f) => loadLib(f).catch(() => failed.push(f))));
-  S.parts = doc.parts.map((p, i) => ({ id: i + 1, lib: p.lib, title: p.title, x: +p.x || 0, y: +p.y || 0, rot: +p.rot || 0 }));
+  // layers (files before version 4 have none: everything goes onto one layer)
+  S.layers = Array.isArray(doc.layers) && doc.layers.length
+    ? doc.layers.filter((l) => l && Number.isFinite(+l.id)).map((l) => ({ id: +l.id, name: String(l.name || '').slice(0, 60) || tr('layer.n', { n: +l.id }), visible: l.visible !== false, locked: !!l.locked }))
+    : [];
+  if (!S.layers.length) S.layers = [{ id: 1, name: tr('layer.n', { n: 1 }), visible: true, locked: false }];
+  S.curLayer = +doc.activeLayer || S.layers[0].id;
+  S.parts = doc.parts.map((p, i) => ({ id: i + 1, lib: p.lib, title: p.title, x: +p.x || 0, y: +p.y || 0, rot: +p.rot || 0, layer: +p.layer || S.layers[0].id }));
   S.nextId = S.parts.length + 1;
   S.shapes = [];
   const idMap = new Map();
   for (const s of doc.shapes || []) {
     if (!Array.isArray(s.pts) || !s.pts.length) continue;
-    const old = s.id, c = addShape(clone(s));
+    const old = s.id, c = addShape({ ...clone(s), layer: +s.layer || S.layers[0].id });
     if (old != null) idMap.set(old, c.id);
   }
   for (const s of S.shapes) if (s.ref) { const id = idMap.get(s.ref.shape); if (id) s.ref.shape = id; else delete s.ref; }
+  fixLayers();
   normalizeRects();
   for (const d of S.shapes) if (d.type === 'dim' && !d.ref) { const ref = findEdgeRef(...d.pts); if (ref) d.ref = ref; } // older files
   S.sel.clear(); S.active = null; S.lastPlace = null; S.undo = []; S.redo = [];
@@ -1467,7 +1636,7 @@ function applyLanguage({ full = true } = {}) {
   if (S.libList.length) { const v = $('#libSelect').value; fillLibSelect(); $('#libSelect').value = v; }
   const lib = S.libs.get(S.lib);
   if (lib) $('#libTitle').textContent = (lib.contents ? lib.contents + ' · ' : '') + tr('lib.parts', { n: lib.parts.length });
-  renderPalette(); propsKey = ''; applyView(); updateStatus();
+  renderPalette(); propsKey = ''; layersKey = ''; applyView(); updateStatus();
 }
 // drop the product name in the toolbar when the buttons would otherwise wrap onto a second row
 function fitToolbar() {
@@ -1549,7 +1718,6 @@ $('#btnRotL').onclick = () => rotateSelection(-step());
 $('#btnRotR').onclick = () => rotateSelection(step());
 $('#btnFlip').onclick = flipLast;
 $('#btnDelete').onclick = deleteSelection;
-$('#btnFit').onclick = fitView;
 $('#zoomIn').onclick = () => zoomCenter(1.25);
 $('#zoomOut').onclick = () => zoomCenter(0.8);
 $('#zoomFit').onclick = fitView;
@@ -1591,7 +1759,7 @@ window.stlApp = {
   rotate: (d) => rotateSelection(d ?? step()),
   fit: fitView, partsList: showBom, help: () => $('#dlgHelp').showModal(),
   toggleLabels: () => $('#chkLabels').click(), tool: setTool,
-  licenses: () => openLicenses(), settings: () => openSettings(),
+  licenses: () => openLicenses(), settings: () => openSettings(), toggleLayers: () => toggleLayersPane(),
   dataDirChosen: (path) => { if (path) { pendingDir = path; showDir(); } },
   copy: () => copySelection(), cut: () => cutSelection(), paste: () => pasteClip(), duplicate: () => duplicateSelection(),
 };
@@ -1601,6 +1769,7 @@ window.stlApp = {
   const r = svg.getBoundingClientRect();
   S.view = { tx: r.width / 2, ty: r.height / 2, z: 12 };
   try { const g = localStorage.getItem('stl.grid'); if (g != null) { S.grid = +g; $('#gridSnap').value = g; } } catch { /* ignore */ }
+  S.layers[0].name = tr('layer.n', { n: 1 });
   applyView();
   S.libList = await fetch('api/libraries').then((x) => x.json()).catch(() => DEFAULT_LIBS);
   fillLibSelect();

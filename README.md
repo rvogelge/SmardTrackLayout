@@ -9,6 +9,7 @@ A browser-based model railway track layout editor built on the
 - It also has rotate, delete, undo/redo, box select, double-click to select a connected group, zoom/pan, part number labels and a parts list (CSV).
 - **Save as…** writes the layout (track and drawings) to a JSON file, **Open…** loads one. Your current work is autosaved in the browser.
 - Drawing tools for baseboard outlines: line, polyline, rectangle, circle, text and dimensions. Dimensions can be linked to edges. Rectangles have edge handles to change only the width or height, and a Properties panel takes exact values from the keyboard.
+- **Layers** in a pane on the right (the **Layers** button shows or hides it). Add, rename and remove layers. Mark elements and move them to another layer. Hide or lock a layer. New elements go onto the active layer. Layers are saved in the layout file.
 - **Settings** (⚙, ⌘, in the Mac app): user interface language (English, Deutsch, Français, Italiano, Español, or the system language), the default track library for new layouts, the default data folder for Open/Save (Documents unless changed; in browsers this needs Chrome/Edge), and the version, commit and commit date of the running build.
 
 ## Run locally
