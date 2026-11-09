@@ -28,7 +28,7 @@ const shapesLayer = $('#shapes'), partsLayer = $('#parts'), annoLayer = $('#anno
 const S = window.__stl = {
   libList: [], libs: new Map(), lib: null,
   parts: [], shapes: [], nextId: 1, els: new Map(),
-  sel: new Set(), active: null, lastPlace: null,
+  sel: new Set(), active: null, gapEnd: null, lastPlace: null,
   view: { tx: 0, ty: 0, z: 12 },
   undo: [], redo: [], conn: new Map(), allEnds: [],
   labels: false, drag: null, snap: null,
@@ -265,6 +265,7 @@ function computeConnections() {
   }
   S.conn = conn; S.allEnds = all;
   if (S.active && (!byId(S.active.pid) || conn.has(endKey(S.active.pid, S.active.i)))) S.active = null;
+  if (S.gapEnd && (!S.active || !byId(S.gapEnd.pid) || conn.has(endKey(S.gapEnd.pid, S.gapEnd.i)))) S.gapEnd = null;
 }
 
 function connectedGroup(id) {
@@ -385,12 +386,20 @@ function renderOverlay() {
   for (const e of S.allEnds) {
     if (S.conn.has(endKey(e.pid, e.i)) || hidden.has(e.pid)) continue;
     const isActive = S.active && S.active.pid === e.pid && S.active.i === e.i;
-    const g = el('g', { class: 'end' + (isActive ? ' active' : ''), 'data-pid': e.pid, 'data-i': e.i });
+    const isGap = S.gapEnd && S.gapEnd.pid === e.pid && S.gapEnd.i === e.i;
+    const g = el('g', { class: 'end' + (isActive ? ' active' : '') + (isGap ? ' target' : ''), 'data-pid': e.pid, 'data-i': e.i });
     const dx = Math.sin(rad(e.a)), dy = Math.cos(rad(e.a));
     g.append(el('line', { x1: e.x, y1: e.y, x2: e.x + dx * len, y2: e.y + dy * len }));
     if (isActive) g.append(el('circle', { class: 'ring', cx: e.x, cy: e.y, r: r * 2.4 }));
     g.append(el('circle', { cx: e.x, cy: e.y, r: isActive ? r * 1.4 : r }));
     overlay.append(g);
+  }
+  const ga = S.gapEnd && S.allEnds.find((e) => e.pid === S.active?.pid && e.i === S.active.i), gb = ga && S.allEnds.find((e) => e.pid === S.gapEnd.pid && e.i === S.gapEnd.i);
+  if (ga && gb) { // the gap to fill: dashed line with its length
+    overlay.prepend(el('line', { class: 'gapline', x1: ga.x, y1: ga.y, x2: gb.x, y2: gb.y }));
+    let th = deg(Math.atan2(gb.y - ga.y, gb.x - ga.x)); if (th > 90) th -= 180; if (th <= -90) th += 180;
+    const t = el('text', { class: 'label gaplabel', transform: `translate(${(ga.x + gb.x) / 2} ${(ga.y + gb.y) / 2}) scale(${1 / z} ${-1 / z}) rotate(${-th}) translate(0 -10)` });
+    t.textContent = `${(Math.round(Math.hypot(gb.x - ga.x, gb.y - ga.y) * MM * 10) / 10).toLocaleString(currentLang())} mm`; overlay.append(t);
   }
   if (S.snap) overlay.append(el('circle', { class: 'snapring', cx: S.snap.x, cy: S.snap.y, r: 10 / z }));
   if (S.labels) {
@@ -446,6 +455,7 @@ function updateStatus() {
   $('#btnUndo').disabled = !S.undo.length; $('#btnRedo').disabled = !S.redo.length;
   const one = (S.sel.size === 1 && S.lastPlace && S.sel.has(S.lastPlace.pid)) || !!selectedSymbol();
   $('#btnFlip').disabled = !one;
+  $('#btnGap').disabled = !S.active;
   $('#btnDelete').disabled = $('#btnRotL').disabled = $('#btnRotR').disabled = !S.sel.size;
   let hint = '';
   if (S.tool !== 'select') hint = tr('th.' + S.tool) + (S.typed ? '  ·  ' + tr('hint.typed', { t: S.typed }) : '');
@@ -454,7 +464,8 @@ function updateStatus() {
     if (it?.pts) hint = shapeInfo(it);
     else { const d = it && def(it); if (d) hint = `${d.desc}${d.partno ? ' · ' + d.partno : ''} · ${d.mfr} · ${f3(it.rot)}°`; }
     if (it && S.layers.length > 1) hint += ' · ' + tr('layer.info', { name: layerOf(it).name });
-  } else if (!S.active && S.parts.length) hint = tr('hint.pickEnd');
+  } else if (S.gapEnd) hint = tr('gap.hint');
+  else if (!S.active && S.parts.length) hint = tr('hint.pickEnd');
   $('#stHint').textContent = hint;
   document.title = `${S.dirty ? '• ' : ''}${$('#layoutName').value || tr('untitled')} — SmardTrackLayout`;
   renderProps();
@@ -1029,7 +1040,10 @@ svg.addEventListener('pointerdown', (ev) => {
   const itemEl = ev.target.closest('.part, .shape');
   if (!endEl && !itemEl && !ev.shiftKey) return startPan(ev);
   if (endEl) {
-    S.active = { pid: +endEl.dataset.pid, i: +endEl.dataset.i };
+    const r = { pid: +endEl.dataset.pid, i: +endEl.dataset.i };
+    // Shift+click: the second end of a gap to fill with straight track
+    if (ev.shiftKey && S.active && !(S.active.pid === r.pid && S.active.i === r.i)) S.gapEnd = S.gapEnd?.pid === r.pid && S.gapEnd.i === r.i ? null : r;
+    else { S.active = r; if (S.gapEnd?.pid === r.pid && S.gapEnd.i === r.i) S.gapEnd = null; }
     renderOverlay(); updateStatus(); return;
   }
   if (itemEl) {
@@ -1392,12 +1406,14 @@ document.addEventListener('keydown', (ev) => {
   if (k === 'escape') {
     if (S.draft) { S.draft.type === 'poly' ? finishPoly() : (S.draft = null); S.typed = ''; renderOverlay(); updateStatus(); return; }
     if (S.tool !== 'select') { setTool('select'); return; }
+    if (S.gapEnd) { S.gapEnd = null; renderOverlay(); updateStatus(); return; }
     S.sel.clear(); S.active = null; S.lastPlace = null; ev.target.blur?.(); clearPresel(); showBox(false); renderSelection(); renderOverlay(); renderUI(); updateStatus(); return;
   }
   if (TOOL_KEYS[k] && !ev.shiftKey) { setTool(TOOL_KEYS[k]); return; }
   if (k === 'delete' || k === 'backspace') { ev.preventDefault(); deleteSelection(); }
   else if (k === 'r') rotateSelection(ev.shiftKey ? -step() : step());
   else if (k === 'tab') { ev.preventDefault(); flipLast(); }
+  else if (k === 'g') fillGap();
   else if (k === 'f') fitView();
   else if (k === '+' || k === '=') zoomCenter(1.25);
   else if (k === '-') zoomCenter(0.8);
@@ -1699,6 +1715,144 @@ function newLayout() {
   loadDoc({ name: tr('untitled'), parts: [], shapes: [] }).then(() => { S.dirty = false; updateStatus(); });
 }
 
+
+// ---------------------------------------------------------------- fill a gap with straight track
+// Two open ends that face each other on one line (the active end, plus a second one chosen with
+// Shift+click, or found automatically) are joined with straight pieces from the library. The lengths
+// are combined so that the pieces fill the gap as exactly as possible.
+const GAP_TOL = 0.7;     // mm: a combination "fits" within this (the ends then still count as connected)
+const GAP_ANGLE = 0.5;   // degrees
+const GAP_SEARCH = 40;   // mm: also offer combinations up to this much shorter / longer
+
+const endOf = (r) => r && S.allEnds.find((e) => e.pid === r.pid && e.i === r.i);
+const isOpen = (e) => e && !S.conn.has(endKey(e.pid, e.i));
+
+// geometry of the gap between end a and end b: length along a's direction, sideways offset, angle error
+function gapGeom(a, b) {
+  const u = [Math.sin(rad(a.a)), Math.cos(rad(a.a))], d = [b.x - a.x, b.y - a.y];
+  return { len: (d[0] * u[0] + d[1] * u[1]) * MM, off: Math.abs(d[0] * u[1] - d[1] * u[0]) * MM, ang: angDiff(a.a, b.a + 180) };
+}
+const gapAligned = (g) => g.ang <= GAP_ANGLE && g.off <= GAP_TOL;
+
+// the open end that best faces end a on its line (for Fill gap without a chosen second end)
+function facingEnd(a) {
+  let best = null;
+  for (const e of S.allEnds) {
+    if (e.pid === a.pid || !isOpen(e) || !isVisible(byId(e.pid))) continue;
+    const g = gapGeom(a, e);
+    if (g.len > GAP_TOL && gapAligned(g) && (!best || g.len < best.g.len)) best = { e, g };
+  }
+  return best?.e || null;
+}
+
+// plain straight pieces of a library: two endpoints facing apart, only straight track; one per length.
+// Only the library's main group of straights is used (not transition, switching or uncoupling tracks
+// filed elsewhere), unless that group is too small.
+function straightsOf(lib) {
+  const all = (lib?.parts || []).filter((d) => {
+    if (d.sym || d.endpoints.length !== 2 || !d.track.length || d.track.some((pl) => pl.length !== 2)) return false;
+    return angDiff(d.endpoints[0].a, d.endpoints[1].a + 180) <= 0.01;
+  });
+  const n = new Map(); for (const d of all) n.set(d.group, (n.get(d.group) || 0) + 1);
+  const main = [...n].sort((a, b) => b[1] - a[1])[0];
+  const use = main && main[1] >= 2 ? all.filter((d) => d.group === main[0]) : all;
+  const byLen = new Map();
+  for (const d of use) {
+    const [e0, e1] = d.endpoints;
+    const len = Math.hypot(e1.x - e0.x, e1.y - e0.y) * MM;
+    if (len < 5) continue;
+    const k = Math.round(len * 10), cur = byLen.get(k);
+    // several pieces of one length (plain, uncoupler, contact track …): take the plainest, i.e. shortest name
+    if (!cur || d.desc.length < cur.d.desc.length) byLen.set(k, { d, len });
+  }
+  return [...byLen.values()].sort((a, b) => b.len - a.len);
+}
+
+// combinations of pieces whose total length is near L (mm): fewest pieces per reachable total
+function gapOptions(L, pieces) {
+  const U = 10, max = Math.round((L + GAP_SEARCH) * U), lens = pieces.map((p) => Math.round(p.len * U));
+  const cnt = new Int32Array(max + 1).fill(-1), prev = new Int16Array(max + 1).fill(-1);
+  cnt[0] = 0;
+  for (let s = 0; s <= max; s++) {
+    if (cnt[s] < 0) continue;
+    for (let i = 0; i < lens.length; i++) {
+      const t = s + lens[i];
+      if (t <= max && (cnt[t] < 0 || cnt[s] + 1 < cnt[t])) { cnt[t] = cnt[s] + 1; prev[t] = i; }
+    }
+  }
+  const out = [];
+  for (let s = Math.max(1, Math.round((L - GAP_SEARCH) * U)); s <= max; s++) {
+    if (cnt[s] <= 0) continue;
+    const use = new Array(pieces.length).fill(0);
+    for (let t = s; t > 0; t -= lens[prev[t]]) use[prev[t]]++;
+    const total = use.reduce((a, n, i) => a + n * pieces[i].len, 0);
+    out.push({ use, n: cnt[s], total, err: total - L });
+  }
+  const fits = out.filter((o) => Math.abs(o.err) <= GAP_TOL).sort((a, b) => a.n - b.n || Math.abs(a.err) - Math.abs(b.err));
+  const byErr = (a, b) => Math.abs(a.err) - Math.abs(b.err) || a.n - b.n;
+  const near = (sign) => out.filter((o) => Math.sign(o.err) === sign && Math.abs(o.err) > GAP_TOL).sort(byErr);
+  // after the fitting ones the closest shorter and longer combinations, closest first
+  const rest = [...near(-1).slice(0, fits.length ? 1 : 2), ...near(1).slice(0, fits.length ? 1 : 2)].sort(byErr);
+  return [...fits.slice(0, 3), ...rest].slice(0, 5);
+}
+
+function fillGap() {
+  const a = endOf(S.active);
+  if (!isOpen(a)) { toast(tr('gap.pickFirst'), 4000); return; }
+  let b = endOf(S.gapEnd);
+  if (!isOpen(b)) b = facingEnd(a);
+  if (!b) { toast(tr('gap.pickSecond'), 5000); return; }
+  const g = gapGeom(a, b);
+  if (!gapAligned(g)) { toast(tr('gap.notAligned', { o: g.off.toFixed(1), a: g.ang.toFixed(1) }), 6000); return; }
+  if (g.len <= GAP_TOL) { toast(tr('gap.closed')); return; }
+  const libFile = byId(a.pid)?.lib || S.lib, lib = S.libs.get(libFile);
+  const pieces = straightsOf(lib);
+  if (!pieces.length) { toast(tr('gap.noStraights', { l: libFile.replace(/\.xtp$/i, '') }), 5000); return; }
+  const opts = gapOptions(g.len, pieces);
+  showGapDialog(a, b, g, libFile, pieces, opts);
+}
+
+const fmtMM = (v) => (Math.round(v * 10) / 10).toLocaleString(currentLang(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+function showGapDialog(a, b, g, libFile, pieces, opts) {
+  const dlg = $('#dlgGap');
+  $('#gapInfo').textContent = tr('gap.info', { l: fmtMM(g.len) });
+  const list = $('#gapList'); list.innerHTML = '';
+  if (!opts.length) list.innerHTML = `<p class="muted">${esc(tr('gap.noCombo'))}</p>`;
+  opts.forEach((o, k) => {
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'gapopt' + (k === 0 ? ' best' : '');
+    const parts = o.use.map((n, i) => (n ? `<span class="gp"><b>${esc(pieces[i].d.partno || fmtMM(pieces[i].len) + ' mm')}</b>${n > 1 ? ` × ${n}` : ''} <small>${esc(fmtMM(pieces[i].len))}</small></span>` : '')).join('');
+    const fit = Math.abs(o.err) <= GAP_TOL;
+    const dev = fit ? tr('gap.fit') : o.err < 0 ? tr('gap.short', { d: fmtMM(-o.err) }) : tr('gap.long', { d: fmtMM(o.err) });
+    btn.innerHTML = `<span class="gparts">${parts}</span><span class="gsum">${esc(tr('gap.pieces', { n: o.n }))} · ${esc(fmtMM(o.total))} mm<br><em class="${fit ? 'ok' : 'warn'}">${esc(dev)}</em></span>`;
+    btn.onclick = () => { dlg.close(); insertStraights(a, libFile, pieces, o); };
+    list.append(btn);
+  });
+  dlg.showModal();
+  list.querySelector('button')?.focus();
+}
+
+function insertStraights(a, libFile, pieces, o) {
+  pushUndo();
+  // longest pieces first, from the active end towards the other one
+  const seq = o.use.flatMap((n, i) => Array(n).fill(pieces[i]));
+  let anchor = { x: a.x, y: a.y, a: a.a };
+  const added = [];
+  for (const pc of seq) {
+    const p = { id: S.nextId++, lib: libFile, title: pc.d.title, x: 0, y: 0, rot: 0, layer: S.curLayer };
+    attach(p, 0, anchor);
+    S.parts.push(p); added.push(p);
+    const g = buildPartEl(p); S.els.set(p.id, g); partsLayer.append(g);
+    anchor = ends(p)[1];
+  }
+  S.sel = new Set(added.map((p) => p.id)); S.lastPlace = null; S.gapEnd = null;
+  computeConnections();
+  if (!S.active || !isOpen(endOf(S.active))) { const last = added.at(-1); const e = isOpen(ends(last)[1]) ? { pid: last.id, i: 1 } : null; S.active = e; }
+  refresh();
+  toast(tr('gap.inserted', { n: added.length }));
+}
+
+$('#btnGap').onclick = fillGap;
 
 // ---------------------------------------------------------------- printing
 // The layout is drawn into #printArea (only that is visible in print media): either fitted onto one
@@ -2044,7 +2198,7 @@ window.stlApp = {
   newLayout, open: openFile, openFile, save, saveAs, saveToFile: saveAs, docFor, savedAs, openText, name: layoutName,
   undo: () => (inField() ? document.execCommand('undo') : undo()),
   redo: () => (inField() ? document.execCommand('redo') : redo()),
-  rotate: (d) => rotateSelection(d ?? step()),
+  rotate: (d) => rotateSelection(d ?? step()), fillGap: () => fillGap(),
   fit: fitView, partsList: showBom, print: () => openPrint(), help: () => $('#dlgHelp').showModal(),
   toggleLabels: () => $('#chkLabels').click(), tool: setTool,
   licenses: () => openLicenses(), settings: () => openSettings(), toggleLayers: () => toggleLayersPane(),

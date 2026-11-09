@@ -31,6 +31,7 @@
     <datalist id="rotSteps"><option value="1"><option value="5"><option value="7.5"><option value="15"><option value="22.5"><option value="30"><option value="45"><option value="90"><option value="180"></datalist>
     <button id="btnRotR" data-i18n-title="rotR.title">↻</button>
     <button id="btnFlip" data-i18n="flip" data-i18n-title="flip.title">Flip end</button>
+    <button id="btnGap" data-i18n="gap" data-i18n-title="gap.title">Fill gap</button>
     <button id="btnDelete" data-i18n="delete" data-i18n-title="delete.title">Delete</button>
   </div>
   <div class="tgroup">
@@ -152,6 +153,7 @@
       <li data-i18n-html="help.12"></li>
       <li data-i18n-html="help.13"></li>
       <li data-i18n-html="help.14"></li>
+      <li data-i18n-html="help.15"></li>
     </ul>
     <p class="muted" data-i18n-html="help.about">SmardTrackLayout © 2026 Rolf Vogelgesang, free software under the GNU GPL v3 or later (no warranty). Track geometry: XTrackCAD parameter libraries (GPL&nbsp;v2 or later), from the <a href="https://sourceforge.net/p/xtrkcad-fork/" target="_blank" rel="noopener">XTrackCAD project</a> on SourceForge. Manufacturer names are trademarks of their owners.</p>
     <menu><button id="btnLicenses" type="button" data-i18n="licenses">Licenses…</button><button value="cancel" data-i18n="close">Close</button></menu>
@@ -187,6 +189,15 @@
       <dl id="buildInfo" class="buildinfo"></dl>
     </div>
     <menu><button value="cancel" formnovalidate data-i18n="cancel">Cancel</button><button value="ok" class="primary" data-i18n="save">Save</button></menu>
+  </form>
+</dialog>
+
+<dialog id="dlgGap">
+  <form method="dialog">
+    <h2 data-i18n="gap.heading">Fill gap with straight track</h2>
+    <p id="gapInfo" class="muted"></p>
+    <div id="gapList" class="gaplist"></div>
+    <menu><button value="cancel" data-i18n="cancel">Cancel</button></menu>
   </form>
 </dialog>
 

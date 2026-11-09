@@ -86,6 +86,7 @@ let menuTexts: [String: [String]] = [
     "Rotate Counter-Clockwise": ["Gegen den Uhrzeigersinn drehen", "Pivoter dans le sens antihoraire", "Ruota in senso antiorario", "Girar en sentido antihorario"],
     "Rotate 90° Clockwise": ["Um 90° im Uhrzeigersinn drehen", "Pivoter de 90° (sens horaire)", "Ruota di 90° in senso orario", "Girar 90° en sentido horario"],
     "Rotate 180°": ["Um 180° drehen", "Pivoter de 180°", "Ruota di 180°", "Girar 180°"],
+    "Fill Gap with Straight Track": ["Lücke mit geraden Gleisen füllen", "Combler l’écart avec des voies droites", "Colma lo spazio con binari diritti", "Rellenar hueco con vías rectas"],
     "Tools": ["Werkzeuge", "Outils", "Strumenti", "Herramientas"],
     "Select / Move": ["Auswählen / Verschieben", "Sélectionner / Déplacer", "Seleziona / Sposta", "Seleccionar / Mover"],
     "Line": ["Linie", "Ligne", "Linea", "Línea"],
@@ -675,6 +676,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item(L("Rotate Counter-Clockwise"), "stlApp.rotate(-(parseFloat(document.getElementById('rotStep').value)||15))", "r", [.command, .option, .shift]),
             item(L("Rotate 90° Clockwise"), "stlApp.rotate(90)", ""),
             item(L("Rotate 180°"), "stlApp.rotate(180)", ""),
+            .separator(),
+            item(L("Fill Gap with Straight Track") + "   G", "stlApp.fillGap()", ""),
         ])
         _ = sub(L("Tools"), [
             item(L("Select / Move") + "   V", "stlApp.tool('select')", ""),
