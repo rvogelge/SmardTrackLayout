@@ -322,6 +322,21 @@ button.licon.add { font-size: 18px; line-height: 1; width: 28px; }
   .layerspane { border-left: 0; border-top: 1px solid var(--border); max-height: 30vh; }
 }
 
+/* generic symbols (signals, buffer stops …) */
+.symg * { vector-effect: non-scaling-stroke; }
+.symg .sk { stroke: var(--rail); stroke-width: 1.3px; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.symg .big .sk { stroke-width: 2.2px; }
+.symg .red { fill: #e03131; } .symg .yel { fill: #fab005; } .symg .wht { fill: #fff; } .symg .blu { fill: #1c7ed6; }
+.symg .dark { fill: #7a2e1d; } .symg .soft { fill-opacity: .55; }
+.symg .wire { stroke: #c92a2a; stroke-dasharray: 2 1.5; }
+.symg .iso { stroke: #ae3ec9; stroke-width: 2.4px; stroke-linecap: butt; }
+.symg .xing { stroke: #e03131; stroke-width: 1.8px; }
+.symg .road { fill: #868e96; fill-opacity: .28; }
+.part.symbol .hit { stroke: none; fill: transparent; pointer-events: all; }
+.part.symbol.sel .hit { fill: var(--sel); fill-opacity: .12; stroke: var(--sel); stroke-opacity: .7; stroke-width: 1px; stroke-dasharray: 3 2; }
+.part.symbol.presel .hit { fill: var(--sel); fill-opacity: .08; }
+.symgroup { background: linear-gradient(var(--accent-soft), transparent 40px); margin: 0 -10px; padding: 4px 10px !important; }
+
 /* print */
 .prgrid2 { display: grid; grid-template-columns: 1fr 1fr 1.5fr; gap: 10px; }
 @media (max-width: 560px) { .prgrid2 { grid-template-columns: 1fr; } }

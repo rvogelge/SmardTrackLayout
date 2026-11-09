@@ -7,6 +7,7 @@ A browser-based model railway track layout editor built on the
 - Click a piece to place it. It connects to the active open end (blue). Use **Tab / Flip end** to attach it by its other end, so a curve bends right instead of left.
 - Drag pieces near an open end and they snap together. The app detects connections automatically.
 - It also has rotate, delete, undo/redo, box select, double-click to select a connected group, zoom/pan, part number labels and a parts list (CSV).
+- Besides the track library, a **Symbols** section offers generic signals (main, distant, combined, shunting, semaphore), buffer stops, uncouplers, power feeds, isolating joints, contacts, level crossings and lamps. They snap onto the track and follow its direction.
 - You can print the layout, either fitted onto one page or at a true scale such as 1:1 (track templates). A true-scale print is split over several sheets and comes with an overview page that shows how to join them. Part numbers and the parts list can be printed too.
 - **Save as…** writes the layout (track and drawings) to a JSON file, **Open…** loads one. Your current work is autosaved in the browser.
 - Drawing tools for baseboard outlines: line, polyline, rectangle, circle, text and dimensions. Dimensions can be linked to edges. Rectangles have edge handles to change only the width or height, and a Properties panel takes exact values from the keyboard.

@@ -9,6 +9,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { parseXtp, partPaths } from './xtp.js';
+import { SYMBOL_LIB, symbolLibrary } from './symbols.js';
 import { t as tr, setLang, applyI18n, LANGS, systemLang, currentLang } from './i18n.js';
 
 const $ = (s) => document.querySelector(s);
@@ -138,6 +139,7 @@ function translateItem(it, dx, dy) {
 // ---------------------------------------------------------------- libraries
 async function loadLib(file) {
   if (S.libs.has(file)) return S.libs.get(file);
+  if (file === SYMBOL_LIB) { const sl = symbolLibrary(); S.libs.set(file, sl); return sl; }
   const res = await fetch('api/library?file=' + encodeURIComponent(file));
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
   const lib = parseXtp(await res.text());
@@ -176,31 +178,51 @@ async function selectLib(file) {
   }
 }
 
+// generic symbols carry their own SVG (in mm); the clickable area is their bounding box
+function symbolEls(d) {
+  const b = d.bbox, g = el('g', { class: 'symg', transform: `scale(${1 / MM})` });
+  g.innerHTML = d.svg;
+  return [el('path', { class: 'hit', d: `M${b.x0} ${b.y0}H${b.x1}V${b.y1}H${b.x0}Z` }), g];
+}
+
 function thumb(d) {
   const b = d.bbox, pad = Math.max(b.x1 - b.x0, b.y1 - b.y0) * 0.06;
   const s = el('svg', { viewBox: `${b.x0 - pad} ${-b.y1 - pad} ${b.x1 - b.x0 + 2 * pad} ${b.y1 - b.y0 + 2 * pad}`, preserveAspectRatio: 'xMidYMid meet', class: 'part' });
   const g = el('g', { transform: 'scale(1 -1)' });
-  const P = partPaths(d);
-  for (const [cls, dd] of [['fill', P.fill], ['outline', P.outline], ['ties', P.ties], ['rails', P.rails]]) if (dd) g.append(el('path', { class: cls, d: dd }));
+  if (d.sym) { s.classList.add('symbol'); g.append(symbolEls(d)[1]); }
+  else {
+    const P = partPaths(d);
+    for (const [cls, dd] of [['fill', P.fill], ['outline', P.outline], ['ties', P.ties], ['rails', P.rails]]) if (dd) g.append(el('path', { class: cls, d: dd }));
+  }
   s.append(g);
   return s;
 }
+
+// the generic symbols come first in every library; their group remembers whether it is open
+let symbolsOpen = false;
+try { symbolsOpen = localStorage.getItem('stl.symbolsOpen') === '1'; } catch { /* ignore */ }
 
 function renderPalette() {
   const lib = S.libs.get(S.lib); if (!lib) return;
   const q = $('#partSearch').value.trim().toLowerCase();
   const pal = $('#palette'); pal.innerHTML = '';
   const groups = new Map();
-  for (const d of lib.parts) {
-    if (q && !(d.desc + ' ' + d.partno + ' ' + d.group).toLowerCase().includes(q)) continue;
-    if (!groups.has(d.group)) groups.set(d.group, []);
-    groups.get(d.group).push(d);
+  for (const [file, l] of [[SYMBOL_LIB, symbolLibrary()], [S.lib, lib]]) {
+    for (const d of l.parts) {
+      if (q && !(d.desc + ' ' + d.partno + ' ' + d.group).toLowerCase().includes(q)) continue;
+      const key = file + '|' + d.group;
+      if (!groups.has(key)) groups.set(key, { file, g: d.group, list: [] });
+      groups.get(key).list.push(d);
+    }
   }
   if (!groups.size) { pal.innerHTML = `<div class="muted pad">${esc(tr('lib.noMatch'))}</div>`; return; }
-  for (const [g, list] of groups) {
-    const det = document.createElement('details'); det.open = true;
+  for (const { file, g, list } of groups.values()) {
+    const isSym = file === SYMBOL_LIB;
+    const det = document.createElement('details'); det.open = !isSym || symbolsOpen || !!q;
+    if (isSym) { det.className = 'symgroup'; det.addEventListener('toggle', () => { if (q) return; symbolsOpen = det.open; try { localStorage.setItem('stl.symbolsOpen', det.open ? '1' : '0'); } catch { /* ignore */ } }); }
     const sum = document.createElement('summary');
-    sum.innerHTML = `${esc(g.replace(lib.contents.split(' ').slice(0, 2).join(' '), '').replace(/^[\s:–-]+/, '') || g)} <span class="n">(${list.length})</span>`;
+    const name = isSym ? g : g.replace(lib.contents.split(' ').slice(0, 2).join(' '), '').replace(/^[\s:–-]+/, '') || g;
+    sum.innerHTML = `${esc(name)} <span class="n">(${list.length})</span>`;
     const grid = document.createElement('div'); grid.className = 'pgrid';
     for (const d of list) {
       const b = document.createElement('button');
@@ -208,8 +230,8 @@ function renderPalette() {
       b.draggable = true;
       b.append(thumb(d));
       b.insertAdjacentHTML('beforeend', `<span class="pd">${esc(d.desc)}</span><span class="pn">${esc(d.partno || '')}</span>`);
-      b.addEventListener('click', () => { setTool('select'); placePart(S.lib, d.title); });
-      b.addEventListener('dragstart', (ev) => { ev.dataTransfer.setData('text/x-stl-part', JSON.stringify({ lib: S.lib, title: d.title })); ev.dataTransfer.effectAllowed = 'copy'; });
+      b.addEventListener('click', () => { setTool('select'); placePart(file, d.title); });
+      b.addEventListener('dragstart', (ev) => { ev.dataTransfer.setData('text/x-stl-part', JSON.stringify({ lib: file, title: d.title })); ev.dataTransfer.effectAllowed = 'copy'; });
       grid.append(b);
     }
     det.append(sum, grid); pal.append(det);
@@ -232,6 +254,13 @@ function computeConnections() {
         if (o.pid === e.pid) continue;
         if (Math.hypot(o.x - e.x, o.y - e.y) < CONNECT_DIST && angDiff(e.a, o.a + 180) < CONNECT_ANGLE) conn.set(endKey(e.pid, e.i), o);
       }
+    }
+  }
+  // a buffer stop at an open end closes it
+  for (const b of S.parts) {
+    if (def(b)?.sym !== 'buffer-stop') continue;
+    for (const e of all) {
+      if (!conn.has(endKey(e.pid, e.i)) && Math.hypot(b.x - e.x, b.y - e.y) < 0.15 && angDiff(e.a, b.rot + 90) < 30) conn.set(endKey(e.pid, e.i), { pid: b.id, i: -1, x: b.x, y: b.y, a: norm(b.rot - 90) });
     }
   }
   S.conn = conn; S.allEnds = all;
@@ -266,7 +295,9 @@ function setPose(g, p) { g.setAttribute('transform', `translate(${p.x} ${p.y}) r
 function buildPartEl(p) {
   const g = el('g', { class: 'part', 'data-id': p.id });
   const d = def(p);
-  if (!d) {
+  if (d?.sym) {
+    g.classList.add('symbol'); g.append(...symbolEls(d));
+  } else if (!d) {
     g.classList.add('missing');
     g.append(el('path', { class: 'hit', d: 'M-1 -1H1V1H-1Z' }), el('path', { class: 'outline', d: 'M-1 -1H1V1H-1Z' }));
   } else {
@@ -413,7 +444,7 @@ function updateStatus() {
   $('#stCounts').textContent = tr('counts', { n: S.parts.length, o: open }) + (S.shapes.length ? tr('counts.drawings', { n: S.shapes.length }) : '') + (S.sel.size ? tr('counts.sel', { n: S.sel.size }) : '');
   $('#emptyHint').hidden = S.parts.length + S.shapes.length > 0 || S.tool !== 'select';
   $('#btnUndo').disabled = !S.undo.length; $('#btnRedo').disabled = !S.redo.length;
-  const one = S.sel.size === 1 && S.lastPlace && S.sel.has(S.lastPlace.pid);
+  const one = (S.sel.size === 1 && S.lastPlace && S.sel.has(S.lastPlace.pid)) || !!selectedSymbol();
   $('#btnFlip').disabled = !one;
   $('#btnDelete').disabled = $('#btnRotL').disabled = $('#btnRotR').disabled = !S.sel.size;
   let hint = '';
@@ -483,9 +514,53 @@ function screenCenterWorld() {
   return toWorldPt(r.left + r.width / 2, r.top + r.height / 2);
 }
 
+// symbols: the nearest point on the centre line of a visible track piece within tol (inches),
+// with the track direction there as a part rotation
+function trackSnap(x, y, tol, exclude) {
+  let best = null;
+  for (const p of S.parts) {
+    if (p.id === exclude || !isVisible(p)) continue;
+    const d = def(p); if (!d?.track.length) continue;
+    const b = partBBox(p);
+    if (x < b.x0 - tol || x > b.x1 + tol || y < b.y0 - tol || y > b.y1 + tol) continue;
+    for (const pl of d.track) {
+      const w = pl.map(([px, py]) => toWorld(p, px, py));
+      for (let i = 1; i < w.length; i++) {
+        const [ax, ay] = w[i - 1], dx = w[i][0] - ax, dy = w[i][1] - ay, L2 = dx * dx + dy * dy;
+        if (!L2) continue;
+        const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / L2));
+        const qx = ax + dx * t, qy = ay + dy * t, dist = Math.hypot(x - qx, y - qy);
+        if (dist < tol && (!best || dist < best.dist)) best = { dist, x: qx, y: qy, rot: norm(-deg(Math.atan2(dy, dx))) };
+      }
+    }
+  }
+  return best;
+}
+// put a symbol on the track point h, along the track, keeping the side it was facing
+function poseOnTrack(p, h) {
+  p.x = h.x; p.y = h.y;
+  p.rot = angDiff(h.rot, p.rot) <= 90 ? h.rot : norm(h.rot + 180);
+}
+
+function placeSymbol(libFile, d, at) {
+  pushUndo();
+  const p = { id: S.nextId++, lib: libFile, title: d.title, x: 0, y: 0, rot: 0, layer: S.curLayer };
+  const anchor = !at && S.active && S.allEnds.find((e) => e.pid === S.active.pid && e.i === S.active.i);
+  const [cx, cy] = at || screenCenterWorld();
+  const h = anchor ? null : trackSnap(cx, cy, (at ? SNAP_PX : 80) / S.view.z);
+  if (anchor) { p.x = anchor.x; p.y = anchor.y; p.rot = norm(anchor.a - 90); } // at the open end, pointing outwards
+  else if (h) poseOnTrack(p, h);
+  else { const b = d.bbox; p.x = cx - (b.x0 + b.x1) / 2; p.y = cy - (b.y0 + b.y1) / 2; }
+  S.parts.push(p);
+  const g = buildPartEl(p); S.els.set(p.id, g); partsLayer.append(g);
+  S.sel = new Set([p.id]); S.lastPlace = null; // the active open end stays where it is
+  refresh();
+}
+
 async function placePart(libFile, title, at = null) {
   const lib = await loadLib(libFile);
   const d = lib.byTitle.get(title); if (!d) return;
+  if (d.sym) { placeSymbol(libFile, d, at); return; }
   pushUndo();
   const p = { id: S.nextId++, lib: libFile, title, x: 0, y: 0, rot: 0, layer: S.curLayer };
   let anchor = null;
@@ -510,7 +585,11 @@ async function placePart(libFile, title, at = null) {
   refresh();
 }
 
+const selectedSymbol = () => { if (S.sel.size !== 1) return null; const p = byId([...S.sel][0]); return p && def(p)?.sym ? p : null; };
+
 function flipLast() {
+  const sp = selectedSymbol();
+  if (sp) { pushUndo(); sp.rot = norm(sp.rot + 180); setPose(S.els.get(sp.id), sp); refresh(); return; } // other side of the track
   const L = S.lastPlace; if (!L) return;
   const p = byId(L.pid); const d = p && def(p); if (!d || d.endpoints.length < 2) return;
   pushUndo();
@@ -1059,6 +1138,10 @@ svg.addEventListener('pointermove', (ev) => {
     for (const o of D.orig) translateItem(itemById(o.id), wx - D.wx, wy - D.wy);
     S.snap = ev.altKey ? null : findSnap(D.ids);
     if (S.snap) applySnap(D.ids, S.snap);
+    else if (!ev.altKey && D.ids.size === 1 && selectedSymbol()) { // a symbol snaps onto the track centre line
+      const p = selectedSymbol(), h = trackSnap(p.x, p.y, SNAP_PX / S.view.z, p.id);
+      if (h) { poseOnTrack(p, h); S.snap = { x: h.x, y: h.y }; }
+    }
     for (const o of D.orig) if (!o.pts) setPose(S.els.get(o.id), byId(o.id));
     if (D.orig.some((o) => o.pts)) renderShapes();
     S.allEnds = S.parts.flatMap(ends);
