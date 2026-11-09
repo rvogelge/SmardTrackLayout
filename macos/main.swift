@@ -71,6 +71,7 @@ let menuTexts: [String: [String]] = [
     "Open…": ["Öffnen…", "Ouvrir…", "Apri…", "Abrir…"],
     "Save": ["Sichern", "Enregistrer", "Salva", "Guardar"],
     "Save As…": ["Sichern unter…", "Enregistrer sous…", "Salva come…", "Guardar como…"],
+    "Print…": ["Drucken…", "Imprimer…", "Stampa…", "Imprimir…"],
     "Close Window": ["Fenster schließen", "Fermer la fenêtre", "Chiudi finestra", "Cerrar ventana"],
     "Edit": ["Bearbeiten", "Édition", "Modifica", "Edición"],
     "Undo": ["Widerrufen", "Annuler", "Annulla", "Deshacer"],
@@ -535,8 +536,29 @@ final class EditorWindowController: NSWindowController, WKUIDelegate, WKScriptMe
                     }
                 } catch { NSAlert(error: error).beginSheetModal(for: window) }
             }
+        case "print":
+            printPage(body, window: window)
         default: return
         }
+    }
+
+    /// the page has laid out its print pages (print media); WKWebView ignores window.print(), so print natively
+    private func printPage(_ body: [String: Any], window: NSWindow) {
+        let info = (NSPrintInfo.shared.copy() as? NSPrintInfo) ?? NSPrintInfo()
+        let pt = { (mm: Double) in CGFloat(mm * 72 / 25.4) }
+        if let w = body["paperWidth"] as? Double, let h = body["paperHeight"] as? Double { info.paperSize = NSSize(width: pt(w), height: pt(h)) }
+        info.orientation = (body["landscape"] as? Bool) == true ? .landscape : .portrait
+        // the page margins come from the print CSS (@page), so the printer may use the whole sheet
+        info.topMargin = 0; info.bottomMargin = 0; info.leftMargin = 0; info.rightMargin = 0
+        info.horizontalPagination = .automatic; info.verticalPagination = .automatic
+        info.isHorizontallyCentered = false; info.isVerticallyCentered = false
+        info.scalingFactor = 1
+        let op = webView.printOperation(with: info)
+        op.jobTitle = body["name"] as? String ?? appName
+        op.showsPrintPanel = true; op.showsProgressPanel = true
+        op.printPanel.options.formUnion([.showsPaperSize, .showsOrientation, .showsScaling, .showsPreview])
+        op.view?.frame = webView.bounds // WebKit prints blank pages without a frame
+        op.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
     }
 
     /// keep the injected info current for reloads
@@ -633,6 +655,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .separator(),
             item(L("Save"), "stlApp.save()", "s"),
             item(L("Save As…"), "stlApp.saveAs()", "s", [.command, .shift]),
+            .separator(),
+            item(L("Print…"), "stlApp.print()", "p"),
             .separator(),
             NSMenuItem(title: L("Close Window"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"),
         ])

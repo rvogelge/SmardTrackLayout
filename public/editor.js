@@ -295,8 +295,7 @@ function dimParts(s, z) {
   return { lines, arrows, mid, th, label: `${mm(g.L)}` };
 }
 
-function buildShapeEl(s) {
-  const z = S.view.z;
+function buildShapeEl(s, z = S.view.z) {
   const g = el('g', { class: `shape ${s.type}${S.sel.has(s.id) ? ' sel' : ''}`, 'data-id': s.id });
   if (s.type === 'dim') {
     const D = dimParts(s, z);
@@ -1274,7 +1273,7 @@ document.addEventListener('keydown', (ev) => {
   const propsUndo = ev.target.closest('#props') && (ev.ctrlKey || ev.metaKey) && 'zy'.includes(ev.key.toLowerCase());
   if (propsUndo) { ev.target.blur(); propsKey = ''; }
   if (!propsUndo && ev.target.closest('input, select, textarea, dialog') && ev.key !== 'Escape') {
-    if (!((ev.ctrlKey || ev.metaKey) && 'so'.includes(ev.key.toLowerCase()))) return;
+    if (!((ev.ctrlKey || ev.metaKey) && 'sop'.includes(ev.key.toLowerCase()))) return;
   }
   if (document.querySelector('dialog[open]')) return;
   const k = ev.key.toLowerCase(), mod = ev.ctrlKey || ev.metaKey;
@@ -1283,6 +1282,7 @@ document.addEventListener('keydown', (ev) => {
   if (mod && k === 'y') { ev.preventDefault(); redo(); return; }
   if (mod && k === 's') { ev.preventDefault(); ev.shiftKey ? saveAs() : save(); return; }
   if (mod && k === 'o') { ev.preventDefault(); openFile(); return; }
+  if (mod && k === 'p' && !ev.shiftKey) { ev.preventDefault(); openPrint(); return; }
   if (mod && k === ',') { ev.preventDefault(); openSettings(); return; }
   if (!mod && k === 'enter' && S.tool === 'select') {
     const f = $('#props:not([hidden]) input'); if (f) { ev.preventDefault(); f.focus(); f.select(); return; }
@@ -1617,6 +1617,194 @@ function newLayout() {
 }
 
 
+// ---------------------------------------------------------------- printing
+// The layout is drawn into #printArea (only that is visible in print media): either fitted onto one
+// page, or at a true scale (1:1 for track templates, 1:10 …) tiled over as many pages as needed, with an
+// overview page that shows how the sheets fit together. Hidden layers are not printed.
+const PAPERS = { a4: [210, 297], a3: [297, 420], a2: [420, 594], letter: [215.9, 279.4], legal: [215.9, 355.6], tabloid: [279.4, 431.8] };
+const PR_MARGIN = 10, PR_HEAD = 9, PR_PAD = 4; // mm on paper: page margin, header height, gap around a fitted drawing
+const PR_KEY = 'stl.print';
+const printOpts = { paper: /^en-(US|CA)$/i.test(navigator.language || '') ? 'letter' : 'a4', orient: 'auto', scale: 0, labels: false, bom: true };
+try { Object.assign(printOpts, JSON.parse(localStorage.getItem(PR_KEY) || '{}')); } catch { /* ignore */ }
+if (!PAPERS[printOpts.paper]) printOpts.paper = 'a4';
+
+const printItems = () => [...S.parts, ...S.shapes].filter(isVisible);
+const colName = (c) => (c >= 26 ? colName(Math.floor(c / 26) - 1) : '') + String.fromCharCode(65 + (c % 26));
+
+// page geometry for the options: k = paper mm per world mm
+function printPlan(o) {
+  const b = unionBBox(printItems()); if (!b) return null;
+  const wMM = Math.max(1, (b.x1 - b.x0) * MM), hMM = Math.max(1, (b.y1 - b.y0) * MM);
+  const [pw, ph] = PAPERS[o.paper] || PAPERS.a4;
+  const plan = (land) => {
+    const paperW = land ? ph : pw, paperH = land ? pw : ph;
+    const W = paperW - 2 * PR_MARGIN, H = paperH - 2 * PR_MARGIN - PR_HEAD - 0.6; // a little slack, so rounding never spills onto an extra sheet
+    if (!o.scale) return { land, paperW, paperH, W, H, k: Math.min((W - 2 * PR_PAD) / wMM, (H - 2 * PR_PAD) / hMM), cols: 1, rows: 1 };
+    const k = 1 / o.scale;
+    return { land, paperW, paperH, W, H, k, cols: Math.max(1, Math.ceil((wMM * k + 2 * PR_PAD) / W)), rows: Math.max(1, Math.ceil((hMM * k + 2 * PR_PAD) / H)) };
+  };
+  let p;
+  if (o.orient !== 'auto') p = plan(o.orient === 'landscape');
+  else {
+    const P = plan(false), L = plan(true);
+    if (!o.scale) p = L.k > P.k * 1.001 ? L : P;
+    else { const n = (x) => x.cols * x.rows; p = n(L) < n(P) || (n(L) === n(P) && wMM > hMM) ? L : P; }
+  }
+  // sheet grid centred on the layout; sheets with nothing on them are left out
+  p.b = b; p.sw = p.W / p.k / MM; p.sh = p.H / p.k / MM; // one sheet's drawing area in world inches
+  p.left = (b.x0 + b.x1) / 2 - (p.cols * p.sw) / 2; p.top = (b.y0 + b.y1) / 2 + (p.rows * p.sh) / 2;
+  const boxes = printItems().map(itemBBox);
+  p.sheets = [];
+  for (let r = 0; r < p.rows; r++) for (let c = 0; c < p.cols; c++) {
+    const x0 = p.left + c * p.sw, x1 = x0 + p.sw, y1 = p.top - r * p.sh, y0 = y1 - p.sh;
+    if (p.cols * p.rows === 1 || boxes.some((q) => q.x1 > x0 && q.x0 < x1 && q.y1 > y0 && q.y0 < y1)) p.sheets.push([r, c]);
+  }
+  p.tiles = p.sheets.length; p.multi = p.cols * p.rows > 1;
+  return p;
+}
+
+const scaleText = (p, o) => (o.scale ? `1:${o.scale}` : `≈ 1:${(1 / p.k) >= 10 ? Math.round(1 / p.k) : +(1 / p.k).toFixed(1)}`);
+
+// the drawing as one group in world coordinates (y up), rebuilt for the paper's px-per-inch z
+function printWorld(z, labels) {
+  const g = el('g', { transform: 'scale(1 -1)' }), shapes = el('g'), parts = el('g'), anno = el('g');
+  syncDims();
+  for (const s of S.shapes) if (isVisible(s)) (s.type === 'dim' || s.type === 'text' ? anno : shapes).append(buildShapeEl(s, z));
+  for (const p of S.parts) if (isVisible(p)) parts.append(buildPartEl(p));
+  if (labels) {
+    for (const p of S.parts) {
+      const d = def(p); if (!d?.partno || !isVisible(p)) continue;
+      const [x, y] = itemCenter(p);
+      const t = el('text', { class: 'label', transform: `translate(${x} ${y}) scale(${1 / z} ${-1 / z})` });
+      t.textContent = d.partno; anno.append(t);
+    }
+  }
+  g.append(shapes, parts, anno);
+  for (const e of g.querySelectorAll('.hit, .hitfill')) e.remove();
+  for (const e of g.querySelectorAll('.sel, .llocked')) e.classList.remove('sel', 'llocked');
+  return g;
+}
+
+// a scale bar of a round length, 15–50 mm long on paper
+function scaleBar(k) {
+  const L = [5000, 2000, 1000, 500, 200, 100, 50, 20, 10, 5].find((v) => v * k <= 50) || 5;
+  const w = L * k, label = L >= 1000 ? `${L / 1000} m` : `${L} mm`;
+  return `<span class="prbar"><svg width="${w + 1}mm" height="3mm" viewBox="-0.5 0 ${w + 1} 3"><path d="M0 0.4V2.6M${w} 0.4V2.6M0 1.5H${w}"/><rect x="0" y="1" width="${w / 2}" height="1"/></svg>${label}</span>`;
+}
+
+function printPage(p, o, { label, idx, total, body, noScale = false }) {
+  const page = document.createElement('section'); page.className = 'prpage';
+  page.style.width = `${p.W}mm`;
+  const date = new Date().toLocaleDateString(currentLang(), { dateStyle: 'medium' });
+  page.innerHTML = `<header class="prhead"><strong>${esc(layoutName())}</strong>${noScale ? '' : `<span>${esc(tr('print.scaleIs', { s: scaleText(p, o) }))}</span>${scaleBar(p.k)}`}<span class="prdate">${esc(date)}</span>`
+    + `<span class="prpg">${esc((label ? label + ' · ' : '') + tr('print.pageN', { i: idx, n: total }))}</span></header>`;
+  page.append(body);
+  return page;
+}
+
+// SVG of the world rectangle [x0, x0 + w] × [yTop - h, yTop] (inches) at wMM × hMM on paper
+function printSvg(world, x0, yTop, w, h, wMM, hMM, cls) {
+  const s = el('svg', { xmlns: NS, class: cls, width: `${wMM}mm`, height: `${hMM}mm`, viewBox: `${x0} ${-yTop} ${w} ${h}`, preserveAspectRatio: 'xMidYMid meet' });
+  s.append(world);
+  return s;
+}
+
+function buildPrint(o = printOpts) {
+  const area = $('#printArea'); area.innerHTML = '';
+  const p = printPlan(o); if (!p) return null;
+  const z = 96 * p.k;                     // CSS px per world inch on paper
+  const { sw: W, sh: H, left, top, multi } = p;
+  const world = printWorld(z, o.labels);
+  const bom = o.bom && S.parts.length ? bomRows() : null;
+  const total = p.tiles + (multi ? 1 : 0) + (bom ? 1 : 0);
+  const used = new Set(p.sheets.map(([r, c]) => r + ',' + c));
+  let idx = 0;
+
+  if (multi) { // overview: the whole layout fitted onto one sheet, with the sheet grid
+    const ovH = p.H - 8; // room for the assembly note below
+    const fk = Math.min(p.W / (p.cols * W * MM), ovH / (p.rows * H * MM)), fz = 96 * fk;
+    const ov = printSvg(printWorld(fz, false), left, top, p.cols * W, p.rows * H, p.W, ovH, 'prsvg');
+    const grid = el('g', { class: 'prgrid' });
+    for (let r = 0; r < p.rows; r++) for (let c = 0; c < p.cols; c++) {
+      const on = used.has(r + ',' + c);
+      grid.append(el('rect', { x: left + c * W, y: -(top - r * H), width: W, height: H, class: on ? '' : 'skip' }));
+      if (!on) continue;
+      const t = el('text', { x: left + (c + 0.5) * W, y: -(top - (r + 0.5) * H), 'font-size': Math.min(W, H) / 4 });
+      t.textContent = colName(c) + (r + 1); grid.append(t);
+    }
+    ov.append(grid);
+    const op = printPage({ ...p, k: fk }, { ...o, scale: 0 }, { label: tr('print.overview'), idx: ++idx, total, body: ov });
+    const note = document.createElement('p'); note.className = 'prnote';
+    note.textContent = tr('print.assemble', { n: p.tiles, c: p.cols, r: p.rows, s: scaleText(p, o) })
+      + (p.tiles < p.cols * p.rows ? ' ' + tr('print.skipped', { n: p.cols * p.rows - p.tiles }) : '');
+    op.append(note);
+    area.append(op);
+  }
+  for (const [r, c] of p.sheets) {
+    const svgEl = printSvg(multi ? world.cloneNode(true) : world, left + c * W, top - r * H, W, H, p.W, p.H, 'prsvg' + (multi ? ' tile' : ''));
+    area.append(printPage(p, o, { label: multi ? tr('print.sheet', { p: colName(c) + (r + 1) }) : '', idx: ++idx, total, body: svgEl }));
+  }
+  if (bom) {
+    const t = document.createElement('div');
+    t.innerHTML = `<h2>${esc(tr('bom'))}</h2><table class="bom"><thead><tr><th>${tr('bom.pn')}</th><th>${tr('bom.desc')}</th><th>${tr('bom.mfr')}</th><th class="n">${tr('bom.qty')}</th></tr></thead><tbody>${bom.map((r) => `<tr><td>${esc(r.partno)}</td><td>${esc(r.desc)}</td><td>${esc(r.mfr)}</td><td class="n">${r.n}</td></tr>`).join('')}</tbody><tfoot><tr><th></th><th>${tr('bom.total')}</th><th></th><th class="n">${S.parts.length}</th></tr></tfoot></table>`;
+    const bp = printPage(p, o, { idx: ++idx, total, body: t, noScale: true }); bp.classList.add('bompage');
+    area.append(bp);
+  }
+  let st = $('#printPageStyle');
+  if (!st) { st = document.createElement('style'); st.id = 'printPageStyle'; document.head.append(st); }
+  st.textContent = `@page { size: ${p.paperW}mm ${p.paperH}mm; margin: ${PR_MARGIN}mm; }`;
+  return p;
+}
+
+function readPrintDialog() {
+  return {
+    paper: $('#prPaper').value, orient: $('#prOrient').value, scale: +$('#prScale').value,
+    labels: $('#prLabels').checked, bom: $('#prBom').checked,
+  };
+}
+function printSummary() {
+  const o = readPrintDialog(), p = printPlan(o), out = $('#prSummary');
+  if (!p) { out.textContent = ''; return; }
+  const orient = tr(p.land ? 'print.landscape' : 'print.portrait');
+  out.textContent = p.multi
+    ? tr('print.sumTiles', { c: p.cols, r: p.rows, n: p.tiles, s: scaleText(p, o), o: orient })
+    : tr('print.sumOne', { s: scaleText(p, o), o: orient });
+  out.classList.toggle('warn', p.tiles > 40);
+}
+function openPrint() {
+  if (!printItems().length) { toast(tr('print.empty')); return; }
+  const dlg = $('#dlgPrint'); if (dlg.open) return;
+  for (const d of document.querySelectorAll('dialog[open]')) d.close();
+  $('#prPaper').value = printOpts.paper; $('#prOrient').value = printOpts.orient;
+  $('#prScale').value = String(printOpts.scale); if ($('#prScale').selectedIndex < 0) $('#prScale').value = '0';
+  $('#prLabels').checked = printOpts.labels; $('#prBom').checked = printOpts.bom;
+  $('#prBom').disabled = !S.parts.length;
+  printSummary();
+  dlg.showModal();
+}
+function runPrint() {
+  const p = buildPrint(printOpts); if (!p) return;
+  if (native) {
+    native.postMessage({ type: 'print', name: layoutName(), paperWidth: p.paperW, paperHeight: p.paperH, landscape: p.land, margin: PR_MARGIN });
+    return;
+  }
+  printedByUs = true;
+  setTimeout(() => window.print(), 50); // let the dialog close and the pages lay out first
+}
+let printedByUs = false;
+// the browser's own Print command: print with the last used options
+window.addEventListener('beforeprint', () => { if (!printedByUs) buildPrint(printOpts); });
+window.addEventListener('afterprint', () => { printedByUs = false; });
+
+for (const id of ['#prPaper', '#prOrient', '#prScale', '#prLabels', '#prBom']) $(id).addEventListener('change', printSummary);
+$('#dlgPrint').addEventListener('close', () => {
+  if ($('#dlgPrint').returnValue !== 'ok') return;
+  Object.assign(printOpts, readPrintDialog());
+  try { localStorage.setItem(PR_KEY, JSON.stringify(printOpts)); } catch { /* ignore */ }
+  runPrint();
+});
+$('#btnPrint').onclick = openPrint;
+
 // ---------------------------------------------------------------- settings
 // Language and default library are kept per browser (localStorage). The data folder is a directory
 // handle in IndexedDB (Chrome/Edge), or, in the macOS app, a path the app keeps in its own defaults.
@@ -1774,7 +1962,7 @@ window.stlApp = {
   undo: () => (inField() ? document.execCommand('undo') : undo()),
   redo: () => (inField() ? document.execCommand('redo') : redo()),
   rotate: (d) => rotateSelection(d ?? step()),
-  fit: fitView, partsList: showBom, help: () => $('#dlgHelp').showModal(),
+  fit: fitView, partsList: showBom, print: () => openPrint(), help: () => $('#dlgHelp').showModal(),
   toggleLabels: () => $('#chkLabels').click(), tool: setTool,
   licenses: () => openLicenses(), settings: () => openSettings(), toggleLayers: () => toggleLayersPane(),
   dataDirChosen: (path) => { if (path) { pendingDir = path; showDir(); } },

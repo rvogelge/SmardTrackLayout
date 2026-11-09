@@ -25,7 +25,7 @@ const rad = (d) => (d * Math.PI) / 180;
 export const arcPoint = (cx, cy, r, a) => [cx + r * Math.sin(rad(a)), cy + r * Math.cos(rad(a))];
 
 function arcPoints(cx, cy, r, a0, a1) {
-  const n = Math.max(2, Math.ceil(Math.abs(a1) / 3) + 1);
+  const n = Math.max(2, Math.ceil(Math.abs(a1)) + 1); // 1° steps: smooth enough for 1:1 prints
   const pts = [];
   for (let i = 0; i < n; i++) pts.push(arcPoint(cx, cy, r, a0 + (a1 * i) / (n - 1)));
   return pts;

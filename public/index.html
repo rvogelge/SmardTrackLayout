@@ -18,6 +18,7 @@
     <button id="btnOpen" class="icon" data-i18n-title="open.title" data-i18n-aria="open" aria-label="Open…"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 15.5V4.5h5l1.5 2H15V9 M2.5 15.5L5 9h13l-2.5 6.5z"/></svg></button>
     <button id="btnSave" class="icon" data-i18n-title="save.title" data-i18n-aria="save" aria-label="Save"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 3.5h10l3 3v10h-13z M6.5 3.5v4h6v-4 M6 16.5v-5h8v5"/></svg></button>
     <button id="btnSaveAs" class="icon" data-i18n-title="saveAs.title" data-i18n-aria="saveAs" aria-label="Save as…"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M9 16.5H3.5v-13h9l2.5 2.5V8 M6 3.5v3.5h5.5V3.5 M11 17.5l.6-2.6 5-5 2 2-5 5z"/></svg></button>
+    <button id="btnPrint" class="icon" data-i18n-title="print.title" data-i18n-aria="print" aria-label="Print…"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 7.5V2.5h9v5 M5.5 14.5H3V8h14v6.5h-2.5 M5.5 11.5h9v6h-9z M7.5 14h5 M7.5 16h3"/></svg></button>
     <input id="fileImport" type="file" accept=".json,application/json" hidden>
   </div>
   <div class="tgroup">
@@ -149,6 +150,7 @@
       <li data-i18n-html="help.10"></li>
       <li data-i18n-html="help.11"></li>
       <li data-i18n-html="help.12"></li>
+      <li data-i18n-html="help.13"></li>
     </ul>
     <p class="muted" data-i18n-html="help.about">SmardTrackLayout © 2026 Rolf Vogelgesang, free software under the GNU GPL v3 or later (no warranty). Track geometry: XTrackCAD parameter libraries (GPL&nbsp;v2 or later), from the <a href="https://sourceforge.net/p/xtrkcad-fork/" target="_blank" rel="noopener">XTrackCAD project</a> on SourceForge. Manufacturer names are trademarks of their owners.</p>
     <menu><button id="btnLicenses" type="button" data-i18n="licenses">Licenses…</button><button value="cancel" data-i18n="close">Close</button></menu>
@@ -186,6 +188,27 @@
     <menu><button value="cancel" formnovalidate data-i18n="cancel">Cancel</button><button value="ok" class="primary" data-i18n="save">Save</button></menu>
   </form>
 </dialog>
+
+<dialog id="dlgPrint">
+  <form method="dialog" class="settings">
+    <h2 data-i18n="print.heading">Print layout</h2>
+    <div class="prgrid2">
+      <label class="field"><span data-i18n="print.paper">Paper</span>
+        <select id="prPaper"><option value="a4">A4</option><option value="a3">A3</option><option value="a2">A2</option><option value="letter">Letter</option><option value="legal">Legal</option><option value="tabloid">Tabloid</option></select></label>
+      <label class="field"><span data-i18n="print.orient">Orientation</span>
+        <select id="prOrient"><option value="auto" data-i18n="print.auto">Automatic</option><option value="portrait" data-i18n="print.portrait">Portrait</option><option value="landscape" data-i18n="print.landscape">Landscape</option></select></label>
+      <label class="field"><span data-i18n="print.scale">Scale</span>
+        <select id="prScale"><option value="0" data-i18n="print.fit">Fit to one page</option><option value="1" data-i18n="print.actual">1:1 (actual size)</option><option value="2">1:2</option><option value="5">1:5</option><option value="10">1:10</option><option value="20">1:20</option><option value="25">1:25</option><option value="50">1:50</option></select></label>
+    </div>
+    <label class="toggle"><input id="prLabels" type="checkbox"> <span data-i18n="print.labels">Part numbers</span></label>
+    <label class="toggle"><input id="prBom" type="checkbox"> <span data-i18n="print.bom">Parts list on an extra page</span></label>
+    <p id="prSummary" class="prsummary"></p>
+    <small class="muted" data-i18n="print.note">Only visible layers are printed. In the print dialog choose the same paper and 100 % scaling, so true-scale prints measure correctly.</small>
+    <menu><button value="cancel" formnovalidate data-i18n="cancel">Cancel</button><button value="ok" class="primary" data-i18n="print.go">Print…</button></menu>
+  </form>
+</dialog>
+
+<div id="printArea" class="printarea"></div>
 
 <script type="module" src="editor.js"></script>
 </body>

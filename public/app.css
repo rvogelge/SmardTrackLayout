@@ -321,3 +321,43 @@ button.licon.add { font-size: 18px; line-height: 1; width: 28px; }
   body.with-layers { grid-template-columns: 1fr; grid-template-rows: auto 38vh 1fr auto auto; grid-template-areas: "top" "side" "stage" "layers" "status"; }
   .layerspane { border-left: 0; border-top: 1px solid var(--border); max-height: 30vh; }
 }
+
+/* print */
+.prgrid2 { display: grid; grid-template-columns: 1fr 1fr 1.5fr; gap: 10px; }
+@media (max-width: 560px) { .prgrid2 { grid-template-columns: 1fr; } }
+form.settings > label.toggle { padding: 0; margin: -6px 0; }
+.prsummary { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--bg); border: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.prsummary.warn { border-color: var(--open); }
+.printarea { display: none; }
+@media print {
+  html, body { height: auto; overflow: visible !important; background: #fff !important; display: block !important; }
+  body > :not(#printArea) { display: none !important; }
+  .printarea {
+    display: block; color: #000; font: 9pt/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    /* drawings always print in the light colors, whatever the screen theme */
+    --rail: #22262b; --tie: #a8916f; --outline: #8a939d; --fill: #dde2e7; --open: #d9480f;
+    --draw: #2b5d8a; --dim: #b4462b; --muted: #555; --canvas: #fff; --border: #bbb;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .prpage { break-after: page; overflow: hidden; }
+  .prpage:last-child { break-after: auto; }
+  .prpage.bompage { overflow: visible; }
+  .prhead { display: flex; align-items: center; gap: 5mm; height: 9mm; white-space: nowrap; overflow: hidden; }
+  .prhead strong { font-size: 11pt; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .prhead .prdate { margin-left: auto; color: #555; }
+  .prhead .prpg { font-weight: 600; }
+  .prbar { display: inline-flex; align-items: center; gap: 1.5mm; color: #555; }
+  .prbar svg { overflow: visible; }
+  .prbar path { fill: none; stroke: #000; stroke-width: .25; }
+  .prbar rect { fill: #000; }
+  .prsvg { display: block; }
+  .prsvg.tile { outline: .2mm solid #999; outline-offset: -.1mm; }
+  .prgrid rect { fill: none; stroke: #1f6feb; stroke-width: 1px; vector-effect: non-scaling-stroke; stroke-dasharray: 4 3; }
+  .prgrid rect.skip { stroke: #bbb; stroke-dasharray: 1 3; }
+  .prgrid text { fill: #1f6feb; fill-opacity: .35; text-anchor: middle; dominant-baseline: central; font-weight: 700; font-family: system-ui, sans-serif; }
+  .prnote { margin: 2mm 0 0; color: #555; }
+  .printarea h2 { font-size: 13pt; margin: 2mm 0 3mm; }
+  .printarea table.bom { font-size: 9pt; }
+  .printarea .bom th, .printarea .bom td { border-bottom: .2mm solid #bbb; padding: 1mm 1.5mm; }
+  .printarea .bom tr { break-inside: avoid; }
+}
